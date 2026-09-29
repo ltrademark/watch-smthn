@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "watch-smthn"
+version = "0.1.0"
+description = "A TUI for browsing and watching IPTV, streaming services, and more"
+authors = [{ name = "Ltrademark" }]
+requires-python = ">=3.10"
+license = "CC-BY-NC-SA-4.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "textual>=0.40",
+    "pyyaml>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ltrademark/watch-smthn"
+Repository = "https://github.com/ltrademark/watch-smthn"
+
+[project.scripts]
+watch-smthn = "watch_smthn.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["watch_smthn"]

@@ -1,0 +1,203 @@
+# Watch Something
+
+A TUI for browsing and watching services online, like IPTV, twitch, youtube, and more.
+
+## Requirements
+
+- Python 3.10 or newer.
+- A terminal with Unicode box-drawing characters and 256 color support.
+- At least one of mpv, VLC, or ffplay on your `PATH`. Only the players whose binaries are found show up in the picker.
+- `streamlink`, required only for sources with `type: st`.
+- A POSIX shell. Launching goes through `nohup ... &` with `shell=True`, so a native Windows shell will not work. WSL is the intended route.
+
+## Disclaimer
+
+This project uses the IPTV source lists from https://github.com/iptv-org/iptv. Through parameters below, this list can be augmented or ignored altogether.
+
+## Install
+
+```bash
+git clone https://github.com/ltrademark/watch-smthn watch-smthn
+cd watch-smthn
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+The only Python dependencies are `textual` and `pyyaml`, pulled in automatically from `pyproject.toml`.
+
+## Run
+
+```bash
+.venv/bin/watch-smthn
+# or
+.venv/bin/python -m watch_smthn
+```
+
+## Keybinds
+
+| Key | Action |
+| --- | --- |
+| `q`, `ctrl+c` | Quit |
+| `esc` | Clear search |
+| `/` | Focus search |
+| `enter` | Play the selected row |
+| `p` | Pick a player |
+| `f` | Toggle favorite |
+| `ctrl+,` | Open the config file |
+| `ctrl+r` | Reload config |
+| `left` | Focus Categories |
+| `right` | Focus Channels |
+
+## Configuration
+
+### Where it lives
+
+The app loads the first file it finds, checking directories in this order and filenames within each directory:
+
+- `~/.config/watch-smthn/config.yaml`
+- `~/.config/watch-smthn/config.yml`
+- `~/.config/watch-smthn/config.json`
+- `~/.watch-smthn/config.yaml`
+- `~/.watch-smthn/config.yml`
+- `~/.watch-smthn/config.json`
+
+The extension picks the parser: `.yaml` and `.yml` go through `yaml.safe_load`, `.json` through `json.loads`. If nothing matches, the bundled `watch_smthn/data/default_config.yaml` is used, which ships a single built-in `iptv` source.
+
+Favorites are stored separately at `~/.config/watch-smthn/favorites.json`. The app writes that file itself, so edit the YAML and leave the JSON alone.
+
+### Top-level keys
+
+| Key | Purpose |
+| --- | --- |
+| `sources` | Everything that appears in the Sources panel. |
+| `players` | Extra players beyond the four built-ins. |
+| `add-iptv-urls` | Extra playlist URLs merged into the built-in `iptv` source. |
+
+Anything else in the file is ignored.
+
+### sources example:
+
+```yaml
+sources:
+  - name: Other TV
+    type: tv
+    categories: true
+    urls:
+      - https://example.com/playlist_usa.m3u8
+      - url: https://example.com/VIDEO_1.m3u8
+        title: Some Channel
+        group: News
+        country: US
+  - name: Twitch
+    type: st
+    categories: false
+    urls:
+      - Twitch
+      - NASA
+```
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `name` | str | required | Sidebar label. `iptv` is reserved; a second source with that name is skipped with a warning. |
+| `type` | `tv` or `st` | `tv` | `tv` reads playlists and direct streams, `st` holds streamlink handles. |
+| `urls` | list | `[]` | Plain strings, or mappings as described below. |
+| `categories` | bool | `true` for `tv`, `false` for `st` | `false` hides the Categories panel while this source is selected. |
+| `source` | str | legacy | Old single-URL form, folded into `urls` on load. |
+| `streamers` | list | legacy | Old handle list for `st` sources, folded into `urls` on load. |
+
+### URL sub-entries
+
+An entry in `urls` is either a plain string, meaning "load this and use whatever the file says", or a mapping that lets you name the result yourself.
+
+| Key | One row (an HLS playlist, or a URL that failed to load) | Many rows (a channel list) |
+| --- | --- | --- |
+| `url` | Required. The location to load. | Same. |
+| `title` | Becomes the row's Name. | Becomes the row's Group, but only when `group` is absent. |
+| `group` | Becomes the row's Group, overriding the default. | Becomes the Group for every row, replacing the file's own `group-title`. |
+| `country` | Becomes the row's Country. | Becomes the Country for every row, replacing the file's own `tvg-country`. |
+
+Some details worth knowing:
+
+- On a single row, the default Group is the source name, unless that would duplicate the row's own Name, in which case it is left blank.
+- Overrides are applied unconditionally so nothing you typed is dropped, including over values the file already supplied.
+- If a mapping turns out to point at a channel list, `title` has nothing left to do once `group` is set, and is ignored.
+- If the fetch fails or returns no rows, the row falls back to the title if there is one, otherwise to the URL filename with separators turned into spaces. Its Group becomes the source name unless that would duplicate the Name.
+- `country` is stored exactly as you write it, and the `country:` search parameter matches exactly, so use codes like `US` or `PH` rather than country names.
+
+### Set up another player
+
+```yaml
+players:
+  - name: Custom Player
+    type: custom
+    command: [myplayer]
+    args: ["--fullscreen"]
+    default: true
+```
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `name` | str | `Custom` | Shown in the player picker. |
+| `type` | one of `mpv`, `vlc`, `ffplay`, `iptv`, `sling`, `plex`, `web`, `custom` | `custom` | Chooses how the command is built. |
+| `command` | list of str | `[]` | Executable plus any fixed leading arguments. Empty means the `type` itself is used as the executable. |
+| `args` | list of str | `[]` | Extra arguments inserted before the URL. |
+| `url_template` | str | unset | Read from the file and stored, but never used when building a command. |
+| `default` | bool | `false` | Marks this as the preferred player. |
+
+Four players are built in: MPV (default), VLC, ffplay, and Open in browser. The browser player shells out to `xdg-open`. A player only appears in the picker if its command is found on `PATH`, which is why an empty `command` list plus a `custom` type never shows up.
+
+### add-iptv-urls
+
+Adds playlist URLs to the built-in `iptv` source without redefining it.
+
+```yaml
+# Append, skipping anything already listed
+add-iptv-urls:
+  - https://example.com/playlist.m3u8
+
+# Or replace the built-in list entirely
+add-iptv-urls:
+  override: true
+  urls:
+    - https://example.com/playlist.m3u8
+```
+
+A plain list appends and deduplicates. The mapping form takes `override` and `urls`, and only `override: true` clears the existing entries. This key has no effect on any other source.
+
+### Reserved names and gotchas
+
+- `iptv` is reserved. It always exists as a bundled source, so a user source with that name is dropped with a warning.
+- `type: st` sources ignore the player picker. They always launch through `streamlink <url> best`, so `streamlink` must be installed for those rows to play.
+- The platform for an `st` source is the source name lowercased, matched against Twitch, YouTube, Bilibili, Dailymotion, and AfreecaTV. An unmatched name still works; the handle is passed to streamlink as-is.
+- Search parameters are `country:`, `lang:`, and `group:`. Plain text matches name, group, content type, country, and language.
+
+### Editing
+
+`ctrl+,` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application.
+
+## Tests
+
+```bash
+.venv/bin/python tests/regression.py
+```
+
+The suite is a single script using `asyncio` and Textual's own headless `run_test`, so no test framework needs installing. It prints a pass count and exits nonzero on any failure.
+
+## Project layout
+
+- `watch_smthn/app.py`: Textual app with layout, CSS, sidebar, table, search, and the loading pipeline.
+- `watch_smthn/config.py`: config discovery, source normalization, and writing new sources back out.
+- `watch_smthn/m3u_parser.py`: M3U parsing, HLS playlist collapsing, and per-entry overrides.
+- `watch_smthn/models.py`: `Channel`, `Playlist`, `Player`, and `EntryMeta`.
+- `watch_smthn/players.py`: player discovery and launching.
+- `watch_smthn/streamers.py`: streamlink command construction.
+- `watch_smthn/favorites.py`: favorites persistence.
+- `tests/regression.py`: the regression suite.
+
+## License
+
+[CC BY-NC-SA 4.0](LICENSE), copyright Ltrademark.
+
+You are free to share and remix this code, with attribution to Ltrademark, under three conditions: no commercial use, derivatives keep the same license, and you indicate whether you changed anything. No resale, no profit.
+
+Creative Commons is not a lawyer and this is not legal advice. The full terms are in [LICENSE](LICENSE).

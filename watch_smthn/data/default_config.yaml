@@ -1,0 +1,38 @@
+# watch somethin configuration
+# Place this file at ~/.config/watch-smthn/config.yaml
+
+# Custom players (optional - MPV/VLC/ffplay/browser are built-in)
+# players:
+#   - name: Custom Player
+#     type: custom
+#     command: [myplayer]
+#     args: ["--fullscreen"]
+
+# Sources — IPTV playlists, streamlink streams, etc.
+# "iptv" is a built-in source; add URLs via add-iptv-urls in your user config.
+sources:
+  - name: "iptv"
+    type: "tv"
+    urls:
+      - "https://iptv-org.github.io/iptv/index.m3u"
+    categories: true
+
+# To add more IPTV URLs to the built-in iptv source, use add-iptv-urls:
+# add-iptv-urls:
+#   - "https://example.com/playlist.m3u"
+#
+# To override (replace) the iptv URLs entirely:
+# add-iptv-urls:
+#   override: true
+#   urls:
+#     - "https://example.com/playlist.m3u"
+#
+# To add a completely new source:
+# sources:
+#   - name: "my news"
+#     type: "tv"
+#     urls: ["https://example.com/news.m3u"]
+#     categories: true
+#   - name: "Twitch"
+#     type: "st"
+#     urls: ["username1", "username2"]

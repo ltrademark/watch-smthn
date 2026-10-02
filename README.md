@@ -1,4 +1,4 @@
-# Watch Something
+# 👁️ Watch Something
 
 A TUI for browsing and watching services online, like IPTV, twitch, youtube, and more.
 
@@ -35,18 +35,18 @@ The only Python dependencies are `textual` and `pyyaml`, pulled in automatically
 
 ## Keybinds
 
-| Key | Action |
-| --- | --- |
-| `q`, `ctrl+c` | Quit |
-| `esc` | Clear search |
-| `/` | Focus search |
-| `enter` | Play the selected row |
-| `p` | Pick a player |
-| `f` | Toggle favorite |
-| `ctrl+,` | Open the config file |
-| `ctrl+r` | Reload config |
-| `left` | Focus Categories |
-| `right` | Focus Channels |
+| Key           | Action                |
+| ------------- | --------------------- |
+| `q`, `ctrl+c` | Quit                  |
+| `esc`         | Clear search          |
+| `/`           | Focus search          |
+| `enter`       | Play the selected row |
+| `p`           | Pick a player         |
+| `f`           | Toggle favorite       |
+| `ctrl+,`      | Open the config file  |
+| `ctrl+r`      | Reload config         |
+| `left`        | Focus Categories      |
+| `right`       | Focus Channels        |
 
 ## Configuration
 
@@ -67,10 +67,10 @@ Favorites are stored separately at `~/.config/watch-smthn/favorites.json`. The a
 
 ### Top-level keys
 
-| Key | Purpose |
-| --- | --- |
-| `sources` | Everything that appears in the Sources panel. |
-| `players` | Extra players beyond the four built-ins. |
+| Key             | Purpose                                                     |
+| --------------- | ----------------------------------------------------------- |
+| `sources`       | Everything that appears in the Sources panel.               |
+| `players`       | Extra players beyond the four built-ins.                    |
 | `add-iptv-urls` | Extra playlist URLs merged into the built-in `iptv` source. |
 
 Anything else in the file is ignored.
@@ -96,14 +96,14 @@ sources:
       - NASA
 ```
 
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `name` | str | required | Sidebar label. `iptv` is reserved; a second source with that name is skipped with a warning. |
-| `type` | `tv` or `st` | `tv` | `tv` reads playlists and direct streams, `st` holds streamlink handles. |
-| `urls` | list | `[]` | Plain strings, or mappings as described below. |
-| `categories` | bool | `true` for `tv`, `false` for `st` | `false` hides the Categories panel while this source is selected. |
-| `source` | str | legacy | Old single-URL form, folded into `urls` on load. |
-| `streamers` | list | legacy | Old handle list for `st` sources, folded into `urls` on load. |
+| Key          | Type         | Default                           | Notes                                                                                        |
+| ------------ | ------------ | --------------------------------- | -------------------------------------------------------------------------------------------- |
+| `name`       | str          | required                          | Sidebar label. `iptv` is reserved; a second source with that name is skipped with a warning. |
+| `type`       | `tv` or `st` | `tv`                              | `tv` reads playlists and direct streams, `st` holds streamlink handles.                      |
+| `urls`       | list         | `[]`                              | Plain strings, or mappings as described below.                                               |
+| `categories` | bool         | `true` for `tv`, `false` for `st` | `false` hides the Categories panel while this source is selected.                            |
+| `source`     | str          | legacy                            | Old single-URL form, folded into `urls` on load.                                             |
+| `streamers`  | list         | legacy                            | Old handle list for `st` sources, folded into `urls` on load.                                |
 
 ### URL sub-entries
 
@@ -135,14 +135,14 @@ players:
     default: true
 ```
 
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `name` | str | `Custom` | Shown in the player picker. |
-| `type` | one of `mpv`, `vlc`, `ffplay`, `iptv`, `sling`, `plex`, `web`, `custom` | `custom` | Chooses how the command is built. |
-| `command` | list of str | `[]` | Executable plus any fixed leading arguments. Empty means the `type` itself is used as the executable. |
-| `args` | list of str | `[]` | Extra arguments inserted before the URL. |
-| `url_template` | str | unset | Read from the file and stored, but never used when building a command. |
-| `default` | bool | `false` | Marks this as the preferred player. |
+| Key            | Type                                                                    | Default  | Notes                                                                                                 |
+| -------------- | ----------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `name`         | str                                                                     | `Custom` | Shown in the player picker.                                                                           |
+| `type`         | one of `mpv`, `vlc`, `ffplay`, `iptv`, `sling`, `plex`, `web`, `custom` | `custom` | Chooses how the command is built.                                                                     |
+| `command`      | list of str                                                             | `[]`     | Executable plus any fixed leading arguments. Empty means the `type` itself is used as the executable. |
+| `args`         | list of str                                                             | `[]`     | Extra arguments inserted before the URL.                                                              |
+| `url_template` | str                                                                     | unset    | Read from the file and stored, but never used when building a command.                                |
+| `default`      | bool                                                                    | `false`  | Marks this as the preferred player.                                                                   |
 
 Four players are built in: MPV (default), VLC, ffplay, and Open in browser. The browser player shells out to `xdg-open`. A player only appears in the picker if its command is found on `PATH`, which is why an empty `command` list plus a `custom` type never shows up.
 

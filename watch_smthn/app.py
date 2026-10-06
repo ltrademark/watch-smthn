@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -40,6 +38,7 @@ from .config import (
     save_handle_to_config,
 )
 from .favorites import load_favorites, toggle_favorite
+from .launchers import open_in_editor, spawn
 from .m3u_parser import load_playlist_auto
 from .models import Channel, ContentType, EntryMeta, Player, Playlist
 from .players import DEFAULT_PLAYERS, find_available_players, launch_player
@@ -1253,23 +1252,8 @@ class WatchSmthnApp(App):
             config_path.parent.mkdir(parents=True, exist_ok=True)
             if BUNDLED_CONFIG.exists():
                 config_path.write_text(BUNDLED_CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
-        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
-        term = os.environ.get("TERM_PROGRAM")
-        if not term or not shutil.which(term):
-            term = None
-            for t in ("kitty", "alacritty", "ghostty", "wezterm", "foot", "xterm"):
-                if shutil.which(t):
-                    term = t
-                    break
         try:
-            if term:
-                if term == "kitty":
-                    cmd = f'nohup kitty {editor} "{config_path}" >/dev/null 2>&1 &'
-                else:
-                    cmd = f'nohup {term} -e {editor} "{config_path}" >/dev/null 2>&1 &'
-            else:
-                cmd = f'nohup {editor} "{config_path}" >/dev/null 2>&1 &'
-            subprocess.Popen(cmd, shell=True)
+            open_in_editor(config_path)
             self.notify(f"Opened {config_path}", severity="information")
         except Exception as e:
             self.notify(f"Failed to open editor: {e}", severity="error")
@@ -1303,10 +1287,7 @@ class WatchSmthnApp(App):
             quality = channel.extra.get("quality", "best")
             url = channel.url
             try:
-                subprocess.Popen(
-                    f'nohup streamlink "{url}" {quality} >/dev/null 2>&1 &',
-                    shell=True,
-                )
+                spawn(build_streamlink_command(url, quality))
                 platform = channel.extra.get("platform", "streamlink")
                 self.notify(f"Playing {channel.name} via {platform}", severity="information")
             except FileNotFoundError:

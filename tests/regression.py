@@ -1,4 +1,7 @@
-import asyncio, sys, copy, warnings
+import asyncio, copy, os, sys, warnings
+from contextlib import contextmanager
+from pathlib import Path
+
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
@@ -56,6 +59,38 @@ def titled_entries():
             if e["meta"].title:
                 out.append((s["name"], e))
     return out
+
+
+@contextmanager
+def patched(obj, name, value):
+    existed = hasattr(obj, name)
+    old = getattr(obj, name, None)
+    setattr(obj, name, value)
+    try:
+        yield
+    finally:
+        if existed:
+            setattr(obj, name, old)
+        else:
+            delattr(obj, name)
+
+
+@contextmanager
+def patched_env(**values):
+    old = {k: os.environ.get(k) for k in values}
+    for key, value in values.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+    try:
+        yield
+    finally:
+        for key, value in old.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def unit_normalization():
@@ -174,8 +209,124 @@ def unit_title_rules():
           [("CNN", "Cartoons", "US"), ("Film", "Cartoons", "US")],
           str([(c.name, c.group, c.country) for c in pl.channels]))
 
-    check("titled entries exist in config", bool(titled_entries()),
-          f"{[e['meta'].title for _, e in titled_entries()]}")
+    entries = titled_entries()
+    if entries:
+        check("titled entries exist in config", True,
+              f"{[e['meta'].title for _, e in entries]}")
+    else:
+        skip("titled entries exist in config", "config has no titled entries")
+
+
+def unit_launchers():
+    print("\n[J] launchers (platform dispatch)")
+    import watch_smthn.launchers as L
+    from watch_smthn.models import Player, PlayerType
+    from watch_smthn.players import launch_player
+
+    class FakeSubprocess:
+        DEVNULL = "DEVNULL"
+
+        def __init__(self):
+            self.calls = {}
+
+        def Popen(self, *args, **kwargs):
+            self.calls = {"args": args, "kwargs": kwargs}
+            return "PROC"
+
+    fake = FakeSubprocess()
+    url = "http://example.invalid/s.m3u8?token=abc&exp=999"
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        result = L.spawn(["mpv", "--no-terminal", url])
+    kw = fake.calls["kwargs"]
+    check("J spawn passes argv as a single list",
+          fake.calls["args"] == (["mpv", "--no-terminal", url],),
+          str(fake.calls["args"]))
+    check("J spawn on unix is shell=False and detached",
+          kw.get("shell") is False and kw.get("start_new_session") is True, str(kw))
+    check("J spawn returns the Popen result", result == "PROC", str(result))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "win32"):
+        L.spawn(["mpv", url])
+    kw = fake.calls["kwargs"]
+    check("J spawn on win32 keeps argv and adds no shell",
+          fake.calls["args"] == (["mpv", url],) and "shell" not in kw
+          and "start_new_session" not in kw, str(fake.calls))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        launch_player(Player(name="MPV", player_type=PlayerType.MPV,
+                             command=["mpv"], args=["--no-terminal"]), url)
+    check("J '&' survives as one argv element through launch_player",
+          fake.calls["args"] == (["mpv", "--no-terminal", url],),
+          str(fake.calls["args"]))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        L.open_url("https://example.com/watch")
+    check("J open_url on unix uses xdg-open",
+          fake.calls["args"] == (["xdg-open", "https://example.com/watch"],),
+          str(fake.calls["args"]))
+
+    started = []
+    with patched(L.os, "startfile", started.append), patched(L.sys, "platform", "win32"):
+        L.open_url("https://example.com/watch")
+    check("J open_url on win32 uses os.startfile",
+          started == ["https://example.com/watch"], str(started))
+
+    config_path = Path("/tmp/watch-smthn-editor-test.yaml")
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"), \
+            patched(L.shutil, "which", lambda name: None), \
+            patched_env(VISUAL=None, EDITOR="code --wait"):
+        L.open_in_editor(config_path)
+    check("J editor with no terminal splits EDITOR into argv",
+          fake.calls["args"] == (["code", "--wait", str(config_path)],),
+          str(fake.calls["args"]))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"), \
+            patched(L.shutil, "which",
+                    lambda name: "/usr/bin/kitty" if name == "kitty" else None), \
+            patched_env(VISUAL=None, EDITOR="nano"):
+        L.open_in_editor(config_path)
+    check("J editor under kitty omits -e",
+          fake.calls["args"] == (["kitty", "nano", str(config_path)],),
+          str(fake.calls["args"]))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"), \
+            patched(L.shutil, "which",
+                    lambda name: "/usr/bin/xterm" if name == "xterm" else None), \
+            patched_env(VISUAL=None, EDITOR="nano"):
+        L.open_in_editor(config_path)
+    check("J editor under another terminal passes -e",
+          fake.calls["args"] == (["xterm", "-e", "nano", str(config_path)],),
+          str(fake.calls["args"]))
+
+    browser = Player(name="Open in browser", player_type=PlayerType.WEB)
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        launch_player(browser, "https://example.com/watch")
+    check("J browser player on unix routes through open_url",
+          fake.calls["args"] == (["xdg-open", "https://example.com/watch"],),
+          str(fake.calls["args"]))
+
+    started.clear()
+    with patched(L.os, "startfile", started.append), patched(L.sys, "platform", "win32"):
+        launch_player(browser, "https://example.com/watch")
+    check("J browser player on win32 routes through os.startfile",
+          started == ["https://example.com/watch"], str(started))
+
+    package = Path(__file__).resolve().parents[1] / "watch_smthn"
+    offenders = []
+    for path in sorted(package.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for token in ("nohup", "/dev/null", "shell=True"):
+            if token in text:
+                offenders.append(f"{path.name}:{token}")
+    check("J no nohup, /dev/null or shell=True left in the package",
+          not offenders, str(offenders))
+
+    carriers = [p.name for p in sorted(package.rglob("*.py"))
+                if "xdg-open" in p.read_text(encoding="utf-8")]
+    check("J xdg-open lives only in launchers.py",
+          carriers == ["launchers.py"], str(carriers))
 
 
 async def session_main():
@@ -418,7 +569,11 @@ async def order_main():
 
         cats = category_labels(app)
         start = 1 if cats and "Favorites" in cats[0] else 0
-        check("I Favorites pinned first when present", start == 1, cats[:2])
+        fav_idx = next((i for i, c in enumerate(cats) if "Favorites" in c), None)
+        if fav_idx is None:
+            skip("I Favorites pinned first when present", "no Favorites source in config")
+        else:
+            check("I Favorites pinned first when present", fav_idx == 0, str(cats[:2]))
         check("I All pinned before every group",
               len(cats) > start and cats[start] == "All", cats[:start + 1])
         body = cats[start + 1:]
@@ -485,6 +640,7 @@ async def order_main():
 async def main():
     unit_normalization()
     unit_title_rules()
+    unit_launchers()
     await session_main()
     await order_main()
     await add_source_main()

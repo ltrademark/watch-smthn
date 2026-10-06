@@ -49,7 +49,7 @@ class Player:
         if self.player_type in (PlayerType.MPV, PlayerType.VLC, PlayerType.FFPLAY):
             return [self.command[0], *self.args, url] if self.command else []
         if self.player_type == PlayerType.WEB:
-            return ["xdg-open", url]
+            return []
         if self.player_type == PlayerType.CUSTOM and self.command:
             return [*self.command, url]
         return [self.player_type.value, url]

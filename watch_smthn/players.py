@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from typing import Optional
 
+from .launchers import open_url, spawn
 from .models import Player, PlayerType
 
 
@@ -50,20 +51,15 @@ def find_available_players(players: list[Player] | None = None) -> list[Player]:
 
 
 def launch_player(player: Player, url: str) -> Optional[subprocess.Popen]:
+    if player.player_type == PlayerType.WEB:
+        try:
+            return open_url(url)
+        except Exception:
+            return None
     cmd = player.build_command(url)
     if not cmd:
         return None
     try:
-        shell_cmd = f"nohup {' '.join(cmd)} >/dev/null 2>&1 &"
-        proc = subprocess.Popen(
-            shell_cmd,
-            shell=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return proc
-    except FileNotFoundError:
-        return None
+        return spawn(cmd)
     except Exception:
         return None

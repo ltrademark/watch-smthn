@@ -20,6 +20,35 @@ def _is_windows() -> bool:
     return sys.platform == "win32"
 
 
+_KNOWN_INSTALL_PATHS: dict[str, tuple[str, ...]] = {
+    "vlc": ("VideoLAN/VLC/vlc.exe", "Programs/VideoLAN/VLC/vlc.exe"),
+    "mpv": ("mpv/mpv.exe", "Programs/mpv/mpv.exe"),
+}
+
+
+def _known_install_roots() -> list[Path]:
+    roots: list[Path] = []
+    for var in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        value = os.environ.get(var)
+        if value:
+            roots.append(Path(value))
+    roots.append(Path("/mnt/c/Program Files"))
+    roots.append(Path("/mnt/c/Program Files (x86)"))
+    return roots
+
+
+def resolve_executable(name: str) -> Optional[str]:
+    found = shutil.which(f"{name}.exe") or shutil.which(name)
+    if found:
+        return found
+    for relative in _KNOWN_INSTALL_PATHS.get(name, ()):
+        for root in _known_install_roots():
+            candidate = root / relative
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
     if not argv:
         return None
@@ -29,6 +58,7 @@ def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
     return subprocess.Popen(
         argv,

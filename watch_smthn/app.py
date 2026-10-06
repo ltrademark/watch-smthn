@@ -631,7 +631,7 @@ class WatchSmthnApp(App):
         Binding("enter", "play_selected", "Play", show=True),
         Binding("p", "play_with_select", "Player", show=True),
         Binding("f", "toggle_favorite", "Fav", show=True),
-        Binding("ctrl+comma", "edit_config", "Config", show=True),
+        Binding("ctrl+e", "edit_config", "Config", show=True),
         Binding("ctrl+r", "reload_config", "Reload", show=True),
         Binding("left", "focus_sidebar", "Categories", show=True, priority=True),
         Binding("right", "focus_table", "Channels", show=True, priority=True),
@@ -1295,8 +1295,14 @@ class WatchSmthnApp(App):
             except Exception as e:
                 self.notify(f"Failed to launch streamlink: {e}", severity="error")
             return
-        proc = launch_player(player, channel.url)
-        if proc:
-            self.notify(f"Playing {channel.name} in {player.name}", severity="information")
+        try:
+            launch_player(player, channel.url)
+        except FileNotFoundError as e:
+            missing = e.filename or player.name
+            self.notify(f"{missing} not found — is it installed and on PATH?",
+                        severity="error")
+        except OSError as e:
+            self.notify(f"Failed to launch {player.name}: {e}", severity="error")
         else:
-            self.notify(f"Failed to launch {player.name}", severity="error")
+            self.notify(f"Playing {channel.name} in {player.name}",
+                        severity="information")

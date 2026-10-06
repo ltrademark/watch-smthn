@@ -43,7 +43,7 @@ The only Python dependencies are `textual` and `pyyaml`, pulled in automatically
 | `enter`       | Play the selected row |
 | `p`           | Pick a player         |
 | `f`           | Toggle favorite       |
-| `ctrl+,`      | Open the config file  |
+| `ctrl+e`      | Open the config file  |
 | `ctrl+r`      | Reload config         |
 | `left`        | Focus Categories      |
 | `right`       | Focus Channels        |
@@ -173,7 +173,7 @@ A plain list appends and deduplicates. The mapping form takes `override` and `ur
 
 ### Editing
 
-`ctrl+,` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application.
+`ctrl+e` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application.
 
 ## Tests
 

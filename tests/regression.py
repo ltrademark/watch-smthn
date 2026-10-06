@@ -1,4 +1,4 @@
-import asyncio, copy, os, sys, warnings
+import asyncio, copy, os, sys, tempfile, warnings
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -225,6 +225,7 @@ def unit_launchers():
 
     class FakeSubprocess:
         DEVNULL = "DEVNULL"
+        CREATE_NO_WINDOW = 0x08000000
 
         def __init__(self):
             self.calls = {}
@@ -252,6 +253,54 @@ def unit_launchers():
     check("J spawn on win32 keeps argv and adds no shell",
           fake.calls["args"] == (["mpv", url],) and "shell" not in kw
           and "start_new_session" not in kw, str(fake.calls))
+    check("J spawn on win32 suppresses the console window",
+          kw.get("creationflags") == fake.CREATE_NO_WINDOW, str(kw))
+
+    absent = L.resolve_executable("definitely-not-a-real-binary-zz")
+    check("J resolve_executable returns None for an absent binary",
+          absent is None, str(absent))
+
+    root = Path(tempfile.mkdtemp(prefix="known-install-"))
+    (root / "VideoLAN" / "VLC").mkdir(parents=True)
+    planted = root / "VideoLAN" / "VLC" / "vlc.exe"
+    planted.write_text("")
+    known_env = {"ProgramFiles": str(root),
+                 "ProgramFiles(x86)": None,
+                 "LOCALAPPDATA": None}
+    with patched(L.shutil, "which", lambda name: None), patched_env(**known_env):
+        resolved = L.resolve_executable("vlc")
+    check("J resolve_executable falls back to a known install path",
+          resolved == str(planted), str(resolved))
+
+    bindir = Path(tempfile.mkdtemp(prefix="bindir-"))
+    planted_mpv = bindir / ("mpv.exe" if os.name == "nt" else "mpv")
+    planted_mpv.write_text("")
+    planted_mpv.chmod(0o755)
+    saved_path = os.environ.get("PATH", "")
+    try:
+        os.environ["PATH"] = str(bindir) + os.pathsep + saved_path
+        from watch_smthn.players import DEFAULT_PLAYERS, find_available_players
+        discovered = {p.name: p for p in find_available_players()}
+    finally:
+        os.environ["PATH"] = saved_path
+    mpv_entry = discovered.get("MPV")
+    check("J discovery returns a resolved absolute path",
+          mpv_entry is not None and Path(mpv_entry.command[0]).is_file(),
+          str(None if mpv_entry is None else mpv_entry.command[0]))
+    check("J DEFAULT_PLAYERS keeps its unresolved command",
+          DEFAULT_PLAYERS[0].command == ["mpv"], str(DEFAULT_PLAYERS[0].command))
+
+    ghost = Player(name="Ghost", player_type=PlayerType.MPV,
+                   command=["definitely-not-a-real-binary-zz"])
+    raised = False
+    try:
+        launch_player(ghost, url)
+    except FileNotFoundError:
+        raised = True
+    except OSError:
+        raised = False
+    check("J launch_player surfaces a missing binary",
+          raised, "FileNotFoundError expected")
 
     with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
         launch_player(Player(name="MPV", player_type=PlayerType.MPV,
@@ -338,6 +387,12 @@ async def session_main():
         check("no CSS errors", app._css_has_errors is False, str(app._css_has_errors))
         n_first = len(app.all_channels)
         check("first source loaded", n_first > 0, f"{n_first} channels")
+
+        keybinds = {b.key: b.action for b in WatchSmthnApp.BINDINGS}
+        check("config key is ctrl+e",
+              keybinds.get("ctrl+e") == "edit_config", str(sorted(keybinds)))
+        check("no ctrl+, keybinding left",
+              "ctrl+comma" not in keybinds, str(sorted(keybinds)))
 
         print("\n[B] search (7 cases)")
         total = len(app.all_channels)
@@ -431,6 +486,32 @@ async def session_main():
         app._filter_channels()
         await app._build_sidebar()
         check("favorite state restored", (ch.url in app.favorite_urls) == was)
+
+        print("\n[K] launch outcome reporting")
+        from watch_smthn.models import Channel
+        from watch_smthn.players import DEFAULT_PLAYERS
+        browser = next(p for p in DEFAULT_PLAYERS
+                       if p.player_type.value == "web")
+        chan = Channel(name="ReportChan", url="https://example.com/watch")
+        notes = []
+        capture = lambda msg="", *a, **k: notes.append(str(msg))
+
+        with patched(app, "notify", capture), \
+                patched(appmod, "launch_player", lambda p, u: None):
+            app._launch(chan, browser)
+        check("K launch without a handle still reports success",
+              any("Playing ReportChan in Open in browser" in n for n in notes),
+              str(notes))
+
+        def missing(p, u):
+            raise FileNotFoundError(2, "No such file or directory", "mpv")
+
+        notes.clear()
+        with patched(app, "notify", capture), \
+                patched(appmod, "launch_player", missing):
+            app._launch(chan, browser)
+        check("K missing binary names the binary in the toast",
+              bool(notes) and "mpv not found" in notes[-1], str(notes))
 
 
 def fake_config(extra_sources=None, twitch_urls=None):

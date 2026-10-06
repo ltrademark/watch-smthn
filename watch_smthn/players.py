@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
+from dataclasses import replace
 from typing import Optional
 
-from .launchers import open_url, spawn
+from .launchers import open_url, resolve_executable, spawn
 from .models import Player, PlayerType
 
 
@@ -43,8 +43,9 @@ def find_available_players(players: list[Player] | None = None) -> list[Player]:
     available = []
     for p in players:
         if p.command:
-            if shutil.which(p.command[0]):
-                available.append(p)
+            resolved = resolve_executable(p.command[0])
+            if resolved:
+                available.append(replace(p, command=[resolved, *p.command[1:]]))
         elif p.player_type == PlayerType.WEB:
             available.append(p)
     return available
@@ -52,14 +53,8 @@ def find_available_players(players: list[Player] | None = None) -> list[Player]:
 
 def launch_player(player: Player, url: str) -> Optional[subprocess.Popen]:
     if player.player_type == PlayerType.WEB:
-        try:
-            return open_url(url)
-        except Exception:
-            return None
+        return open_url(url)
     cmd = player.build_command(url)
     if not cmd:
         return None
-    try:
-        return spawn(cmd)
-    except Exception:
-        return None
+    return spawn(cmd)

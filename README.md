@@ -6,9 +6,9 @@ A TUI for browsing and watching services online, like IPTV, twitch, youtube, and
 
 - Python 3.10 or newer.
 - A terminal with Unicode box-drawing characters and 256 color support.
-- At least one of mpv, VLC, or ffplay on your `PATH`. Only the players whose binaries are found show up in the picker.
+- At least one of mpv, VLC, or ffplay. On Windows the standard install locations are searched too, so the player does not have to be on `PATH`. Only the players found show up in the picker.
 - `streamlink`, required only for sources with `type: st`.
-- A POSIX shell. Launching goes through `nohup ... &` with `shell=True`, so a native Windows shell will not work. WSL is the intended route.
+- Nothing else. Launching is platform dispatched, so a native Windows shell, WSL and Linux all work.
 
 ## Disclaimer
 

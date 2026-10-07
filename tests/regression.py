@@ -613,6 +613,77 @@ def unit_reaping():
           "open_in_editor's handle is discarded")
 
 
+def unit_detach():
+    print("\n[P] detached player launches")
+    import inspect
+    import signal
+    import time
+    import watch_smthn.launchers as L
+
+    script = L._detach_script(["mpv", "--title", "a&b", "http://x/s?a=1&b=2"])
+    check("P detach quotes shell metacharacters in argv",
+          "'a&b'" in script and "'http://x/s?a=1&b=2'" in script, script)
+    check("P detach adds a single job separator",
+          script.count(" & ") == 1, script)
+
+    raised = False
+    try:
+        L.spawn(["definitely-not-a-real-binary-zz"], detach=True)
+    except FileNotFoundError:
+        raised = True
+    except OSError:
+        raised = False
+    check("P detached launch surfaces a missing binary", raised,
+          "FileNotFoundError expected")
+
+    if os.name == "nt":
+        skip("detached player", "unix only")
+        return
+
+    handle = L.spawn(["/bin/sh", "-c", "sleep 30"], detach=True)
+    check("P detach hands back a pid",
+          handle is not None and getattr(handle, "pid", 0) > 0,
+          str(getattr(handle, "pid", None)))
+    check("P a detached player reports alive",
+          handle is not None and handle.poll() is None,
+          str(handle.poll() if handle else "no handle"))
+
+    def ancestry_reaches_us(pid):
+        seen = set()
+        while pid and pid not in seen:
+            seen.add(pid)
+            if pid == os.getpid():
+                return True
+            try:
+                stat = Path(f"/proc/{pid}/stat").read_text()
+                pid = int(stat[stat.rindex(")") + 1:].split()[1])
+            except (OSError, ValueError, IndexError):
+                return False
+        return False
+
+    if handle and Path(f"/proc/{handle.pid}").exists():
+        check("P the player is no longer our descendant",
+              not ancestry_reaches_us(handle.pid), str(handle.pid))
+    else:
+        skip("detached ancestry", "/proc unavailable")
+
+    if handle:
+        try:
+            os.kill(handle.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        deadline = time.time() + 2.0
+        while handle.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+        check("P a dead detached player reports gone",
+              handle.poll() is not None, str(handle.poll()))
+
+    launch_src = inspect.getsource(WatchSmthnApp._launch)
+    check("P both player launches are detached",
+          launch_src.count("detach=True") >= 2,
+          str(launch_src.count("detach=True")))
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -732,13 +803,13 @@ async def session_main():
         capture = lambda msg="", *a, **k: notes.append(str(msg))
 
         with patched(app, "notify", capture), \
-                patched(appmod, "launch_player", lambda p, u, sink=None: None):
+                patched(appmod, "launch_player", lambda p, u, sink=None, **kw: None):
             app._launch(chan, browser)
         check("K launch without a handle still reports success",
               any("Playing ReportChan in Open in browser" in n for n in notes),
               str(notes))
 
-        def missing(p, u, sink=None):
+        def missing(p, u, sink=None, **kw):
             raise FileNotFoundError(2, "No such file or directory", "mpv")
 
         notes.clear()
@@ -961,6 +1032,7 @@ async def main():
     unit_debug()
     unit_url_validation()
     unit_reaping()
+    unit_detach()
     await session_main()
     await order_main()
     await add_source_main()

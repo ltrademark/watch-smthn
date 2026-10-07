@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import replace
 from typing import BinaryIO, Optional
 
 from .debug import dbg
-from .launchers import normalize_path, open_url, resolve_executable, spawn
+from .launchers import (SpawnedProcess, normalize_path, open_url,
+                        resolve_executable, spawn)
 from .models import Player, PlayerType
 
 
@@ -66,7 +66,8 @@ def find_available_players(players: list[Player] | None = None,
 
 
 def launch_player(player: Player, url: str,
-                  sink: Optional[BinaryIO] = None) -> Optional[subprocess.Popen]:
+                  sink: Optional[BinaryIO] = None,
+                  detach: bool = False) -> Optional[SpawnedProcess]:
     if player.player_type == PlayerType.WEB:
         dbg(f"open in browser: {url}")
         return open_url(url, sink)
@@ -75,4 +76,4 @@ def launch_player(player: Player, url: str,
         dbg(f"launch {player.name}: empty command, refusing")
         return None
     dbg(f"launch {player.name}: {cmd}")
-    return spawn(cmd, stderr=sink)
+    return spawn(cmd, stderr=sink, detach=detach)

@@ -1311,7 +1311,7 @@ class WatchSmthnApp(App):
             dbg(f"streamlink command: {cmd}")
             sink = open_sink()
             try:
-                proc = spawn(cmd, stderr=sink)
+                proc = spawn(cmd, stderr=sink, detach=True)
             except FileNotFoundError:
                 sink.close()
                 self.notify("streamlink not found — install it first", severity="error")
@@ -1326,7 +1326,7 @@ class WatchSmthnApp(App):
             return
         sink = open_sink()
         try:
-            proc = launch_player(player, channel.url, sink=sink)
+            proc = launch_player(player, channel.url, sink=sink, detach=True)
         except FileNotFoundError as e:
             sink.close()
             dbg_error("player launch failed", e)
@@ -1365,9 +1365,13 @@ class WatchSmthnApp(App):
                 if code:
                     summary = summarize(tail)
                     dbg(f"{label} exited with code {code}")
-                    self.notify(f"{label} exited: {summary}" if summary
-                                else f"{label} exited with code {code}",
-                                severity="error")
+                    if summary:
+                        message = f"{label} exited: {summary}"
+                    elif code > 0:
+                        message = f"{label} exited with code {code}"
+                    else:
+                        message = f"{label} exited"
+                    self.notify(message, severity="error")
                 else:
                     dbg(f"{label} survived the settle window")
             finally:

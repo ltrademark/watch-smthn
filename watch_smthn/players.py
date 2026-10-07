@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import replace
 from typing import Optional
 
-from .launchers import open_url, resolve_executable, spawn
+from .launchers import normalize_path, open_url, resolve_executable, spawn
 from .models import Player, PlayerType
 
 
@@ -37,13 +37,20 @@ DEFAULT_PLAYERS: list[Player] = [
 ]
 
 
-def find_available_players(players: list[Player] | None = None) -> list[Player]:
+def find_available_players(players: list[Player] | None = None,
+                           paths: dict[str, str] | None = None) -> list[Player]:
     if players is None:
         players = DEFAULT_PLAYERS
+    configured = paths or {}
     available = []
     for p in players:
         if p.command:
-            resolved = resolve_executable(p.command[0])
+            key = p.command[0]
+            override = configured.get(key) or configured.get(p.name)
+            if override:
+                resolved = normalize_path(override)
+            else:
+                resolved = resolve_executable(normalize_path(key))
             if resolved:
                 available.append(replace(p, command=[resolved, *p.command[1:]]))
         elif p.player_type == PlayerType.WEB:

@@ -62,6 +62,27 @@ def get_custom_players(config: dict[str, Any]) -> list[Player]:
     return players
 
 
+def get_player_paths(config: dict[str, Any]) -> dict[str, str]:
+    raw = config.get("player_paths")
+    if not isinstance(raw, dict):
+        return {}
+    paths: dict[str, str] = {}
+    for key, value in raw.items():
+        name = str(key).strip()
+        target = "" if value is None else str(value).strip()
+        if name and target:
+            paths[name] = target
+    return paths
+
+
+def get_editor(config: dict[str, Any]) -> str | None:
+    value = config.get("editor")
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _entry_meta(item: dict[str, Any]) -> EntryMeta:
     """Build an :class:`EntryMeta` from a ``urls`` mapping, blanks meaning absent."""
     def opt(key: str) -> str | None:

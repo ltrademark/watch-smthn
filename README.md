@@ -71,6 +71,8 @@ Favorites are stored separately at `~/.config/watch-smthn/favorites.json`. The a
 | --------------- | ----------------------------------------------------------- |
 | `sources`       | Everything that appears in the Sources panel.               |
 | `players`       | Extra players beyond the four built-ins.                    |
+| `player_paths`  | Absolute paths for players that discovery misses.           |
+| `editor`        | The editor `ctrl+e` opens the config in.                    |
 | `add-iptv-urls` | Extra playlist URLs merged into the built-in `iptv` source. |
 
 Anything else in the file is ignored.
@@ -146,6 +148,26 @@ players:
 
 Four players are built in: MPV (default), VLC, ffplay, and Open in browser. The browser player shells out to `xdg-open`. A player only appears in the picker if its command is found on `PATH`, which is why an empty `command` list plus a `custom` type never shows up.
 
+### player_paths
+
+Points a player at an executable that auto-discovery never finds. Keys are the built-in player keys (`mpv`, `vlc`, `ffplay`) or the player's `name`, values are the path.
+
+```yaml
+player_paths:
+  mpv: C:\ProgramData\chocolatey\lib\mpv.install\tools\mpv.exe
+  VLC: /mnt/c/Program Files/VideoLAN/VLC/vlc.exe
+```
+
+An override is used exactly as written, without an existence check, so a wrong path shows up as a failed launch naming the path instead of silently dropping the player. Under WSL a `C:\...` or `C:/...` value is rewritten to `/mnt/c/...` first, so the same line works on Windows and on Linux.
+
+### editor
+
+```yaml
+editor: code
+```
+
+`ctrl+e` splits this value the way a shell would, so `editor: "code --wait"` and `editor: "kitty -e vim"` both work. It is checked before `VISUAL` and `EDITOR`, which are only consulted when `editor` is unset.
+
 ### add-iptv-urls
 
 Adds playlist URLs to the built-in `iptv` source without redefining it.
@@ -173,7 +195,7 @@ A plain list appends and deduplicates. The mapping form takes `override` and `ur
 
 ### Editing
 
-`ctrl+e` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application.
+`ctrl+e` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application. The editor is picked from `editor` in the config, then `VISUAL`, then `EDITOR`, then the platform default.
 
 ## Tests
 

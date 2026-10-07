@@ -31,6 +31,8 @@ from textual.widgets import (
 from .config import (
     _find_config,
     get_custom_players,
+    get_editor,
+    get_player_paths,
     load_config,
     load_sources,
     load_streamers_from_sources,
@@ -742,7 +744,7 @@ class WatchSmthnApp(App):
 
         custom_players = get_custom_players(config)
         all_players = DEFAULT_PLAYERS + custom_players
-        self.available_players = find_available_players(all_players)
+        self.available_players = find_available_players(all_players, get_player_paths(config))
 
         self.sources = load_sources(config)
         if not self.sources:
@@ -1253,7 +1255,11 @@ class WatchSmthnApp(App):
             if BUNDLED_CONFIG.exists():
                 config_path.write_text(BUNDLED_CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
         try:
-            open_in_editor(config_path)
+            editor = get_editor(load_config())
+        except Exception:
+            editor = None
+        try:
+            open_in_editor(config_path, editor)
             self.notify(f"Opened {config_path}", severity="information")
         except Exception as e:
             self.notify(f"Failed to open editor: {e}", severity="error")
@@ -1261,7 +1267,8 @@ class WatchSmthnApp(App):
     def action_reload_config(self) -> None:
         self.favorite_urls = load_favorites()
         config = load_config()
-        self.available_players = find_available_players(DEFAULT_PLAYERS + get_custom_players(config))
+        self.available_players = find_available_players(
+            DEFAULT_PLAYERS + get_custom_players(config), get_player_paths(config))
         self.sources = load_sources(config)
         if not self.sources:
             self.sources = [{"name": "iptv", "type": "tv", "urls": ["https://iptv-org.github.io/iptv/index.m3u"], "categories": True}]

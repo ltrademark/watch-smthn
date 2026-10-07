@@ -378,6 +378,91 @@ def unit_launchers():
           carriers == ["launchers.py"], str(carriers))
 
 
+def unit_config_overrides():
+    print("\n[L] config overrides (player_paths / editor)")
+    import watch_smthn.launchers as L
+    from watch_smthn.config import get_editor, get_player_paths
+    from watch_smthn.players import DEFAULT_PLAYERS, find_available_players
+
+    choco = "C:\\ProgramData\\chocolatey\\lib\\mpv.install\\tools\\mpv.exe"
+    parsed = get_player_paths({"player_paths": {
+        "mpv": choco,
+        "vlc": "  /mnt/c/Program Files/VideoLAN/VLC/vlc.exe  ",
+        "ffplay": "",
+        "": "ignored",
+    }})
+    check("L player_paths keeps real entries", set(parsed) == {"mpv", "vlc"}, str(sorted(parsed)))
+    check("L player_paths strips whitespace",
+          parsed["vlc"] == "/mnt/c/Program Files/VideoLAN/VLC/vlc.exe", repr(parsed["vlc"]))
+    check("L player_paths ignores a non-mapping",
+          get_player_paths({"player_paths": ["mpv"]}) == {}, "not a dict")
+    check("L player_paths defaults to empty", get_player_paths({}) == {}, "absent")
+
+    check("L editor comes from config",
+          get_editor({"editor": "  code --wait  "}) == "code --wait",
+          repr(get_editor({"editor": "  code --wait  "})))
+    check("L editor is None when absent or blank",
+          get_editor({}) is None and get_editor({"editor": "   "}) is None, "absent/blank")
+
+    with patched(L.sys, "platform", "linux"):
+        check("L windows drive path maps to /mnt",
+              L.normalize_path(choco) == "/mnt/c/ProgramData/chocolatey/lib/mpv.install/tools/mpv.exe",
+              L.normalize_path(choco))
+        check("L forward slash drive path maps too",
+              L.normalize_path("C:/Program Files/VLC/vlc.exe") == "/mnt/c/Program Files/VLC/vlc.exe",
+              L.normalize_path("C:/Program Files/VLC/vlc.exe"))
+        check("L bare names and unix paths pass through",
+              L.normalize_path("mpv") == "mpv" and L.normalize_path("/usr/bin/vim") == "/usr/bin/vim",
+              f"{L.normalize_path('mpv')} {L.normalize_path('/usr/bin/vim')}")
+
+        found = find_available_players(DEFAULT_PLAYERS, {"mpv": choco})
+        mpv = next((p for p in found if p.name == "MPV"), None)
+        check("L player_paths override beats discovery",
+              mpv is not None and mpv.command[0].startswith("/mnt/c/ProgramData/chocolatey"),
+              "MPV not listed" if mpv is None else mpv.command[0])
+        check("L override is used without an existence check",
+              mpv is not None and not Path(mpv.command[0]).exists(),
+              "listed anyway" if mpv else "MPV not listed")
+
+        named = find_available_players(DEFAULT_PLAYERS, {"MPV": choco})
+        entry = next((p for p in named if p.name == "MPV"), None)
+        check("L override may be keyed by player name",
+              entry is not None and entry.command[0].startswith("/mnt/c/"),
+              "MPV not listed" if entry is None else entry.command[0])
+
+    with patched(L.sys, "platform", "win32"):
+        kept = L.normalize_path("C:\\Program Files\\VLC\\vlc.exe")
+    check("L windows build keeps drive paths", kept == "C:\\Program Files\\VLC\\vlc.exe", kept)
+    check("L DEFAULT_PLAYERS stays unresolved",
+          DEFAULT_PLAYERS[0].command == ["mpv"], str(DEFAULT_PLAYERS[0].command))
+
+    class FakeSubprocess:
+        DEVNULL = "DEVNULL"
+        CREATE_NO_WINDOW = 0x08000000
+
+        def __init__(self):
+            self.calls = {}
+
+        def Popen(self, *args, **kwargs):
+            self.calls = {"args": args, "kwargs": kwargs}
+            return "PROC"
+
+    fake = FakeSubprocess()
+    config_path = Path("/tmp/watch-smthn-editor-override.yaml")
+    started = []
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "win32"), \
+            patched(L.os, "startfile", started.append), \
+            patched_env(VISUAL="nano", EDITOR="nano"):
+        L.open_in_editor(config_path, "code --wait")
+    check("L configured editor becomes argv",
+          fake.calls["args"] == (["code", "--wait", str(config_path)],),
+          str(fake.calls["args"]))
+    check("L configured editor skips os.startfile", started == [], str(started))
+    check("L configured editor skips the terminal probe",
+          not any(t in str(fake.calls["args"]) for t in ("kitty", "xterm", "alacritty")),
+          str(fake.calls["args"]))
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -722,6 +807,7 @@ async def main():
     unit_normalization()
     unit_title_rules()
     unit_launchers()
+    unit_config_overrides()
     await session_main()
     await order_main()
     await add_source_main()

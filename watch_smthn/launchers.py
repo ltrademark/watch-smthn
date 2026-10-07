@@ -49,6 +49,15 @@ def resolve_executable(name: str) -> Optional[str]:
     return None
 
 
+def normalize_path(value: str) -> str:
+    if _is_windows() or len(value) < 3:
+        return value
+    if value[1] != ":" or not value[0].isalpha() or value[2] not in "\\/":
+        return value
+    tail = value[2:].replace("\\", "/").lstrip("/")
+    return f"/mnt/{value[0].lower()}/{tail}"
+
+
 def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
     if not argv:
         return None
@@ -77,12 +86,15 @@ def open_url(url: str) -> Optional[subprocess.Popen]:
     return spawn(["xdg-open", url])
 
 
-def open_in_editor(path: Path) -> Optional[subprocess.Popen]:
+def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subprocess.Popen]:
+    explicit = shlex.split(editor) if editor else []
+    if explicit:
+        return spawn([*explicit, str(path)])
     if _is_windows():
         os.startfile(str(path))
         return None
-    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
-    argv = shlex.split(editor) or ["nano"]
+    fallback = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
+    argv = shlex.split(fallback) or ["nano"]
     term = os.environ.get("TERM_PROGRAM")
     if not term or not shutil.which(term):
         term = None

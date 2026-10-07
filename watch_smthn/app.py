@@ -1264,7 +1264,7 @@ class WatchSmthnApp(App):
             editor = None
         dbg(f"edit config: editor={editor!r} path={config_path}")
         try:
-            open_in_editor(config_path, editor)
+            self._track(open_in_editor(config_path, editor))
             dbg(f"edit config: returned for {config_path}")
             self.notify(f"Opened {config_path}", severity="information")
         except Exception as e:

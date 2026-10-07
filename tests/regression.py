@@ -607,6 +607,11 @@ def unit_reaping():
           "set_interval" in mounted and "_reap_children" in mounted,
           "set_interval(5.0, self._reap_children) not found in on_mount")
 
+    editor_src = inspect.getsource(WatchSmthnApp.action_edit_config)
+    check("O the editor process is tracked",
+          "_track(open_in_editor" in editor_src,
+          "open_in_editor's handle is discarded")
+
 
 async def session_main():
     app = WatchSmthnApp()

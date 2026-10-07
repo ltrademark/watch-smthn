@@ -12,7 +12,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$here"
 
 say() { printf '%s\n' "$*"; }
-die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
+# Exit codes are part of the contract: 1 means the install ran and the report
+# still found no player, 2 means this script itself could not do its job.
+# CI allows 1 on a bare runner and fails on anything above it.
+die() { printf 'install.sh: %s\n' "$*" >&2; exit 2; }
 
 python=""
 for candidate in python3 python; do

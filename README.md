@@ -32,7 +32,7 @@ cd watch-smthn
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config.
+Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config. A script exits 1 when the report still finds no player and 2 when the script itself could not run, which is what CI keys off.
 
 To do it by hand instead:
 

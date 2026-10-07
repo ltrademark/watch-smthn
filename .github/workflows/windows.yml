@@ -25,6 +25,17 @@ jobs:
       - name: Install
         run: pip install -e .
 
+      - name: Install script
+        if: runner.os == 'Linux'
+        run: |
+          set +e
+          bash install.sh
+          code=$?
+          set -e
+          # 1 is the report finding no player, which is allowed on a bare
+          # runner; anything above it means the script itself broke.
+          test "$code" -le 1
+
       - name: Compile
         run: python -m compileall -q watch_smthn tests
 

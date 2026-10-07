@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import replace
 from typing import Optional
 
+from .debug import dbg
 from .launchers import normalize_path, open_url, resolve_executable, spawn
 from .models import Player, PlayerType
 
@@ -42,6 +43,8 @@ def find_available_players(players: list[Player] | None = None,
     if players is None:
         players = DEFAULT_PLAYERS
     configured = paths or {}
+    if configured:
+        dbg(f"player_paths override: {configured}")
     available = []
     for p in players:
         if p.command:
@@ -49,19 +52,26 @@ def find_available_players(players: list[Player] | None = None,
             override = configured.get(key) or configured.get(p.name)
             if override:
                 resolved = normalize_path(override)
+                source = f"override {override!r}"
             else:
                 resolved = resolve_executable(normalize_path(key))
+                source = f"discovery of {key!r}"
             if resolved:
                 available.append(replace(p, command=[resolved, *p.command[1:]]))
+            dbg(f"player {p.name}: {resolved or 'NOT FOUND'} ({source})")
         elif p.player_type == PlayerType.WEB:
             available.append(p)
+    dbg(f"available players: {[p.name for p in available]}")
     return available
 
 
 def launch_player(player: Player, url: str) -> Optional[subprocess.Popen]:
     if player.player_type == PlayerType.WEB:
+        dbg(f"open in browser: {url}")
         return open_url(url)
     cmd = player.build_command(url)
     if not cmd:
+        dbg(f"launch {player.name}: empty command, refusing")
         return None
+    dbg(f"launch {player.name}: {cmd}")
     return spawn(cmd)

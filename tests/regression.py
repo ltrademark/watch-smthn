@@ -467,6 +467,48 @@ def unit_config_overrides():
           str(fake.calls["args"]))
 
 
+def unit_debug():
+    print("\n[M] debug logging (--debug)")
+    from watch_smthn import debug as D
+    from watch_smthn.__main__ import build_parser
+
+    args = build_parser().parse_args([])
+    check("M --debug is off by default",
+          args.debug is False and args.debug_log is None, f"{args.debug} {args.debug_log}")
+    args = build_parser().parse_args(["--debug", "--debug-log", "/tmp/x.log"])
+    check("M --debug and --debug-log parse",
+          args.debug is True and args.debug_log == "/tmp/x.log",
+          f"{args.debug} {args.debug_log}")
+
+    with patched_env(WATCH_SMTHN_DEBUG_LOG=None, WATCH_SMTHN_DEBUG=None):
+        default = D.default_log_path()
+    check("M default log path is outside the repo",
+          not str(default).startswith(str(Path.cwd())), str(default))
+
+    D.disable_debug()
+    D.dbg("written only while enabled")
+    target = Path(tempfile.mkdtemp()) / "nested" / "debug.log"
+    try:
+        path = D.setup_debug(target)
+        check("M setup_debug creates the file",
+              path == target and target.exists(), str(path))
+        D.dbg("hello from the suite")
+        try:
+            raise ValueError("boom")
+        except ValueError as exc:
+            D.dbg_error("something broke", exc)
+        body = target.read_text(encoding="utf-8")
+        check("M debug log contains the message",
+              "hello from the suite" in body, body[-160:])
+        check("M debug log contains the exception",
+              "ValueError: boom" in body, body[-160:])
+    finally:
+        D.disable_debug()
+    leftover = target.read_text(encoding="utf-8") if target.exists() else ""
+    check("M disable_debug stops writing",
+          D.is_enabled() is False and "written after disable" not in leftover, "still writing")
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -812,6 +854,7 @@ async def main():
     unit_title_rules()
     unit_launchers()
     unit_config_overrides()
+    unit_debug()
     await session_main()
     await order_main()
     await add_source_main()

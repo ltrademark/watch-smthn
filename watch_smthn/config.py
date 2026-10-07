@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from .debug import dbg
 from .models import Channel, ContentType, EntryMeta, Player, PlayerType
 
 CONFIG_DIRS = [
@@ -41,10 +42,23 @@ def _load_config_file(path: Path) -> dict[str, Any]:
 def load_config() -> dict[str, Any]:
     p = _find_config()
     if p:
-        return _load_config_file(p)
-    if BUNDLED_CONFIG.exists():
-        return _load_config_file(BUNDLED_CONFIG)
-    return {}
+        cfg = _load_config_file(p)
+        dbg(f"config: read {p}")
+    elif BUNDLED_CONFIG.exists():
+        cfg = _load_config_file(BUNDLED_CONFIG)
+        dbg(f"config: no user file, bundled {BUNDLED_CONFIG}")
+    else:
+        dbg("config: no user file and no bundled default")
+        return {}
+    if isinstance(cfg, dict):
+        dbg(f"config keys: {sorted(str(k) for k in cfg)}")
+        if cfg.get("player_paths"):
+            dbg(f"config player_paths: {cfg['player_paths']}")
+        if cfg.get("editor") is not None:
+            dbg(f"config editor: {cfg['editor']!r}")
+    else:
+        dbg(f"config root is {type(cfg).__name__}, not a mapping")
+    return cfg
 
 
 def get_custom_players(config: dict[str, Any]) -> list[Player]:

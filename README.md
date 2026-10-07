@@ -33,6 +33,16 @@ The only Python dependencies are `textual` and `pyyaml`, pulled in automatically
 .venv/bin/python -m watch_smthn
 ```
 
+### Debugging
+
+```bash
+.venv/bin/watch-smthn --debug
+```
+
+Traces the decisions behind a launch to `~/.config/watch-smthn/debug.log`: which config file was read, which `player_paths` override matched, the exact command built for a channel, the pid `spawn` got back, and the full traceback when it raises. Use `--debug-log PATH` to write somewhere else, or set `WATCH_SMTHN_DEBUG=1` to turn it on without changing how you launch the app.
+
+Nothing is logged unless you ask for it, and the file sits outside the repository so the TUI keeps the terminal to itself.
+
 ## Keybinds
 
 | Key           | Action                |

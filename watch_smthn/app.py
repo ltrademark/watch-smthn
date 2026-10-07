@@ -39,6 +39,7 @@ from .config import (
     save_custom_source_to_config,
     save_handle_to_config,
 )
+from .debug import dbg, dbg_error
 from .favorites import load_favorites, toggle_favorite
 from .launchers import open_in_editor, spawn
 from .m3u_parser import load_playlist_auto
@@ -1256,12 +1257,16 @@ class WatchSmthnApp(App):
                 config_path.write_text(BUNDLED_CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
         try:
             editor = get_editor(load_config())
-        except Exception:
+        except Exception as e:
+            dbg_error("could not read editor from config", e)
             editor = None
+        dbg(f"edit config: editor={editor!r} path={config_path}")
         try:
             open_in_editor(config_path, editor)
+            dbg(f"edit config: returned for {config_path}")
             self.notify(f"Opened {config_path}", severity="information")
         except Exception as e:
+            dbg_error("edit config failed", e)
             self.notify(f"Failed to open editor: {e}", severity="error")
 
     def action_reload_config(self) -> None:
@@ -1277,6 +1282,7 @@ class WatchSmthnApp(App):
             ch.favorite = ch.url in self.favorite_urls
         self.current_source_idx = min(self.current_source_idx, len(self.sources) - 1)
         self._load_source(self.current_source_idx)
+        dbg(f"reload: {len(self.sources)} sources, players={[p.name for p in self.available_players]}")
         self.notify("Config reloaded", severity="information")
 
     def _show_player_select(self, channel: Channel) -> None:
@@ -1290,25 +1296,31 @@ class WatchSmthnApp(App):
             self._launch(channel, player)
 
     def _launch(self, channel: Channel, player: Player) -> None:
+        dbg(f"launch: {channel.name!r} via {player.name!r} url={channel.url!r}")
         if channel.extra.get("streamlink"):
             quality = channel.extra.get("quality", "best")
             url = channel.url
+            cmd = build_streamlink_command(url, quality)
+            dbg(f"streamlink command: {cmd}")
             try:
-                spawn(build_streamlink_command(url, quality))
+                spawn(cmd)
                 platform = channel.extra.get("platform", "streamlink")
                 self.notify(f"Playing {channel.name} via {platform}", severity="information")
             except FileNotFoundError:
                 self.notify("streamlink not found — install it first", severity="error")
             except Exception as e:
+                dbg_error("streamlink launch failed", e)
                 self.notify(f"Failed to launch streamlink: {e}", severity="error")
             return
         try:
             launch_player(player, channel.url)
         except FileNotFoundError as e:
+            dbg_error("player launch failed", e)
             missing = e.filename or player.name
             self.notify(f"{missing} not found — is it installed and on PATH?",
                         severity="error")
         except OSError as e:
+            dbg_error("player launch failed", e)
             self.notify(f"Failed to launch {player.name}: {e}", severity="error")
         else:
             self.notify(f"Playing {channel.name} in {player.name}",

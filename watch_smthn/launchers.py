@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .debug import dbg, dbg_error
+
 
 def _is_windows() -> bool:
     return sys.platform == "win32"
@@ -60,23 +62,32 @@ def normalize_path(value: str) -> str:
 
 def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
     if not argv:
+        dbg("spawn: empty argv, nothing to run")
         return None
-    if _is_windows():
-        return subprocess.Popen(
-            argv,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-    return subprocess.Popen(
-        argv,
-        shell=False,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    dbg(f"spawn: {argv}")
+    try:
+        if _is_windows():
+            proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        else:
+            proc = subprocess.Popen(
+                argv,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except BaseException as exc:
+        dbg_error("spawn raised", exc)
+        raise
+    dbg(f"spawn: ok, pid={getattr(proc, 'pid', '?')}")
+    return proc
 
 
 def open_url(url: str) -> Optional[subprocess.Popen]:
@@ -89,8 +100,10 @@ def open_url(url: str) -> Optional[subprocess.Popen]:
 def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subprocess.Popen]:
     explicit = shlex.split(editor) if editor else []
     if explicit:
+        dbg(f"editor: configured {explicit!r} for {path}")
         return spawn([*explicit, str(path)])
     if _is_windows():
+        dbg(f"editor: os.startfile({path})")
         os.startfile(str(path))
         return None
     fallback = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
@@ -102,6 +115,7 @@ def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subproc
             if shutil.which(candidate):
                 term = candidate
                 break
+    dbg(f"editor: fallback editor={argv!r} term={term!r}")
     if term == "kitty":
         return spawn([term, *argv, str(path)])
     if term:

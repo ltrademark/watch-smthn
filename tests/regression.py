@@ -418,11 +418,15 @@ def unit_config_overrides():
         found = find_available_players(DEFAULT_PLAYERS, {"mpv": choco})
         mpv = next((p for p in found if p.name == "MPV"), None)
         check("L player_paths override beats discovery",
-              mpv is not None and mpv.command[0].startswith("/mnt/c/ProgramData/chocolatey"),
+              mpv is not None and mpv.command[0] == L.normalize_path(choco),
               "MPV not listed" if mpv is None else mpv.command[0])
+
+        ghost = "/mnt/c/definitely/not/installed/mpv.exe"
+        ghosted = find_available_players(DEFAULT_PLAYERS, {"mpv": ghost})
+        ghost_entry = next((p for p in ghosted if p.name == "MPV"), None)
         check("L override is used without an existence check",
-              mpv is not None and not Path(mpv.command[0]).exists(),
-              "listed anyway" if mpv else "MPV not listed")
+              ghost_entry is not None and not Path(ghost).exists() and ghost_entry.command[0] == ghost,
+              "MPV dropped" if ghost_entry is None else ghost_entry.command[0])
 
         named = find_available_players(DEFAULT_PLAYERS, {"MPV": choco})
         entry = next((p for p in named if p.name == "MPV"), None)

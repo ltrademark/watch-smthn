@@ -766,8 +766,8 @@ def unit_windows_editor():
         raise OSError(150, "No application associated with the specified file")
 
     check("S editor candidates are tried in order",
-          L._EDITOR_CANDIDATES == ("code", "notepad++", "notepad"),
-          str(L._EDITOR_CANDIDATES))
+          L.EDITOR_CANDIDATES == ("code", "notepad++", "notepad"),
+          str(L.EDITOR_CANDIDATES))
 
     started = []
     with patched(L, "spawn", no_spawn), patched(L.sys, "platform", "win32"), \
@@ -819,6 +819,81 @@ def unit_windows_editor():
           "C:\\Windows" in roots, str(roots))
     check("S the Windows directory is reachable from WSL",
           "/mnt/c/Windows" in roots, str(roots))
+
+
+def unit_doctor():
+    print("\n[T] dependency report (--doctor)")
+    import io
+    from contextlib import redirect_stdout
+    import watch_smthn.doctor as D
+    import watch_smthn.launchers as L
+    from watch_smthn.__main__ import build_parser
+
+    args = build_parser().parse_args([])
+    check("T --doctor is off by default", args.doctor is False, str(args.doctor))
+    args = build_parser().parse_args(["--doctor"])
+    check("T --doctor parses", args.doctor is True, str(args.doctor))
+
+    def report(which):
+        out = io.StringIO()
+        with patched(D, "load_config", lambda: {}), \
+                patched(D, "_config_path", lambda: (Path("/tmp/doctor-config.yaml"), False)), \
+                patched(D, "FAVORITES_FILE", Path("/tmp/doctor-favorites.json")), \
+                patched(L.shutil, "which", which), \
+                patched_env(VISUAL=None, EDITOR=None), \
+                redirect_stdout(out):
+            code = D.run_doctor()
+        return code, out.getvalue()
+
+    installed = lambda name: {  # noqa: E731
+        "mpv": "/opt/mpv/mpv",
+        "xdg-open": "/usr/bin/xdg-open",
+    }.get(name)
+    code, text = report(installed)
+    check("T a working install reports status ok",
+          code == 0 and "status ok" in text, f"code={code}")
+    check("T each player is named with what was found",
+          "player MPV /opt/mpv/mpv" in text and "player VLC missing" in text,
+          text)
+    check("T the report names the opener and streamlink",
+          "opener /usr/bin/xdg-open" in text and "streamlink missing" in text, text)
+    check("T an optional tool is a warning, not a failure",
+          "warning streamlink missing" in text and "\nmissing " not in text, text)
+
+    code, text = report(lambda name: None)
+    check("T no player at all fails the report",
+          code == 1 and "missing player" in text and "status not ok" in text,
+          f"code={code}")
+    check("T a missing player is the only fatal gap",
+          "warning opener, streamlink missing" in text, text)
+
+    cfg = Path("/tmp/doctor-never-created.yaml")
+    cfg.unlink(missing_ok=True)
+    with patched(D, "_config_path", lambda: (cfg, False)), \
+            patched(D, "load_config", lambda: {}), \
+            redirect_stdout(io.StringIO()):
+        D.run_doctor()
+    check("T the report creates no config file", not cfg.exists(), str(cfg))
+
+    import watch_smthn.__main__ as M
+
+    def explode(*args, **kwargs):
+        raise AssertionError("--doctor must not build the app")
+
+    out = io.StringIO()
+    with patched(M, "WatchSmthnApp", explode), \
+            patched(D, "load_config", lambda: {}), \
+            patched(D, "_config_path", lambda: (Path("/tmp/doctor-config.yaml"), False)), \
+            patched(D, "FAVORITES_FILE", Path("/tmp/doctor-favorites.json")), \
+            patched(L.shutil, "which", installed), \
+            redirect_stdout(out):
+        try:
+            M.main(["--doctor"])
+        except SystemExit as exc:
+            raised = exc.code
+    check("T main runs the report and exits without a TUI",
+          raised == 0 and "watch-smthn doctor" in out.getvalue(),
+          f"exit={raised}")
 
 
 async def session_main():
@@ -1229,6 +1304,7 @@ async def main():
     unit_detach()
     unit_player_log()
     unit_windows_editor()
+    unit_doctor()
     await session_main()
     await order_main()
     await add_source_main()

@@ -37,7 +37,7 @@ _KNOWN_INSTALL_PATHS: dict[str, tuple[str, ...]] = {
 
 # Tried in order on Windows once the file association is not usable.  code
 # covers the common case, notepad is present on every Windows install.
-_EDITOR_CANDIDATES: tuple[str, ...] = ("code", "notepad++", "notepad")
+EDITOR_CANDIDATES: tuple[str, ...] = ("code", "notepad++", "notepad")
 
 
 def _known_install_roots() -> list[Path]:
@@ -296,6 +296,13 @@ def spawn(argv: list[str], *, stderr: Optional[BinaryIO] = None,
     return proc
 
 
+# Openers the app knows about, in preference order. doctor.py reports which of
+# them actually resolve, while open_url still launches the first entry directly
+# until the WSL chain of task 4 lands. Declared here so the name xdg-open stays
+# in the single file allowed to spawn it, which the regression suite asserts.
+OPENERS: tuple[str, ...] = ("xdg-open", "wslview", "explorer.exe")
+
+
 def open_url(url: str, sink: Optional[BinaryIO] = None) -> Optional[subprocess.Popen]:
     if _is_windows():
         os.startfile(url)
@@ -318,16 +325,16 @@ def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subproc
             # the only reason worth swallowing: the editor list below is what
             # makes ctrl+e work on a machine that never picked a .yaml default.
             dbg_error("editor: file association unusable", exc)
-        for candidate in _EDITOR_CANDIDATES:
+        for candidate in EDITOR_CANDIDATES:
             resolved = resolve_executable(candidate)
             if resolved:
                 dbg(f"editor: {candidate} resolved to {resolved}")
                 return spawn([resolved, str(path)])
-        dbg(f"editor: none of {list(_EDITOR_CANDIDATES)} found")
+        dbg(f"editor: none of {list(EDITOR_CANDIDATES)} found")
         raise FileNotFoundError(
             errno.ENOENT,
             os.strerror(errno.ENOENT),
-            ", ".join(_EDITOR_CANDIDATES),
+            ", ".join(EDITOR_CANDIDATES),
         )
     fallback = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
     argv = shlex.split(fallback) or ["nano"]

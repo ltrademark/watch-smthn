@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="where --debug writes (default ~/.config/watch-smthn/debug.log)",
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="report what this installation can find, then exit",
+    )
     return parser
 
 
@@ -36,6 +41,9 @@ def main(argv: list[str] | None = None) -> None:
         dbg(f"debug log: {path}")
         dbg(f"platform={sys.platform} python={sys.version.split()[0]}")
         dbg(f"argv={sys.argv}")
+    if args.doctor:
+        from .doctor import run_doctor
+        sys.exit(run_doctor())
     app = WatchSmthnApp()
     app.run()
 

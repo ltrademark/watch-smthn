@@ -16,14 +16,38 @@ This project uses the IPTV source lists from https://github.com/iptv-org/iptv. T
 
 ## Install
 
+Linux and WSL:
+
 ```bash
 git clone https://github.com/ltrademark/watch-smthn watch-smthn
 cd watch-smthn
+./install.sh
+```
+
+Windows, from PowerShell:
+
+```powershell
+git clone https://github.com/ltrademark/watch-smthn
+cd watch-smthn
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config.
+
+To do it by hand instead:
+
+```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-The only Python dependencies are `textual` and `pyyaml`, pulled in automatically from `pyproject.toml`.
+### Checking an installation
+
+```bash
+watch-smthn --doctor
+```
+
+One fact per line: where the config and favorites files are, what each player resolved to, which editor `ctrl+e` will use, the URL opener, and whether `streamlink` is present. It creates no files, launches nothing, and exits non-zero only when no player at all was found, which is what the install scripts key their hints off. The output is safe to paste into a bug report.
 
 ## Run
 

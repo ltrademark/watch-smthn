@@ -658,6 +658,7 @@ class WatchSmthnApp(App):
         self.current_source_idx: int = 0
         self.current_search: str = ""
         self.favorite_urls: set[str] = load_favorites()
+        self._children: list[Any] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -692,6 +693,7 @@ class WatchSmthnApp(App):
         self._update_status()
         self.query_one("#channel-table", DataTable).focus()
         self.set_timer(0.1, self._highlight_active_category)
+        self.set_interval(5.0, self._reap_children)
         self.call_after_refresh(self._update_sidebar_geometry)
 
     def on_resize(self, event: Resize) -> None:
@@ -1352,6 +1354,7 @@ class WatchSmthnApp(App):
             except OSError:
                 pass
             return
+        self._track(proc)
 
         def settle() -> None:
             try:
@@ -1374,3 +1377,24 @@ class WatchSmthnApp(App):
                     pass
 
         self.set_timer(delay, settle)
+
+    def _track(self, proc) -> None:
+        """Hold a spawned player so it gets reaped once it exits."""
+        if proc is not None:
+            self._children.append(proc)
+
+    def _reap_children(self) -> None:
+        """Poll tracked players so exited ones do not linger as zombies.
+
+        _watch_launch polls only inside the settle window, while a player
+        normally outlives it by hours, so the child would otherwise stay
+        <defunct> until the app itself exits.
+        """
+        alive = []
+        for child in self._children:
+            try:
+                if child.poll() is None:
+                    alive.append(child)
+            except Exception as exc:
+                dbg_error("reap poll failed", exc)
+        self._children = alive

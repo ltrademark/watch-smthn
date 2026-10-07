@@ -559,6 +559,55 @@ def unit_url_validation():
           any("Cannot play Broken" in n for n in notes), str(notes))
 
 
+def unit_reaping():
+    print("\n[O] Spawned player reaping")
+
+    class FakeProc:
+        def __init__(self, code):
+            self.code = code
+            self.polls = 0
+
+        def poll(self):
+            self.polls += 1
+            return self.code
+
+    class Broken:
+        def poll(self):
+            raise RuntimeError("boom")
+
+    app = WatchSmthnApp()
+    app._track(None)
+    check("O a null handle is not tracked", app._children == [], str(app._children))
+
+    alive = FakeProc(None)
+    dead = FakeProc(0)
+    app._track(alive)
+    app._track(dead)
+    check("O spawned players are tracked",
+          app._children == [alive, dead], str(len(app._children)))
+
+    app._reap_children()
+    check("O exited players are dropped",
+          app._children == [alive], str(len(app._children)))
+    check("O survivors are polled again", alive.polls >= 1, str(alive.polls))
+
+    app._children.append(Broken())
+    raised = False
+    try:
+        app._reap_children()
+    except Exception:
+        raised = True
+    check("O a failing poll does not break the reaper", not raised, "raised")
+    check("O the failing child is dropped",
+          app._children == [alive], str(len(app._children)))
+
+    import inspect
+    mounted = inspect.getsource(WatchSmthnApp.on_mount)
+    check("O the reaper interval is wired up",
+          "set_interval" in mounted and "_reap_children" in mounted,
+          "set_interval(5.0, self._reap_children) not found in on_mount")
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -906,6 +955,7 @@ async def main():
     unit_config_overrides()
     unit_debug()
     unit_url_validation()
+    unit_reaping()
     await session_main()
     await order_main()
     await add_source_main()

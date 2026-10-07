@@ -92,16 +92,52 @@ def open_sink() -> BinaryIO:
     return tempfile.TemporaryFile(mode="w+b")
 
 
-def read_tail(sink: BinaryIO, limit: int = 800) -> str:
+def read_tail(sink: "BinaryIO | str | os.PathLike[str]", limit: int = 800) -> str:
+    """Tail of a handle or of a path, whichever the player was told to write.
+
+    A player pointed at a log file of its own (see player_log_path) never
+    touches the stderr handle, so the settle window reads from there instead.
+    """
+    opened = None
     try:
-        sink.flush()
-        sink.seek(0, os.SEEK_END)
-        size = sink.tell()
-        sink.seek(max(0, size - limit))
-        data = sink.read()
+        if isinstance(sink, (str, os.PathLike)):
+            opened = open(sink, "rb")
+            handle = opened
+        else:
+            handle = sink
+            handle.flush()
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(max(0, size - limit))
+        data = handle.read()
     except (OSError, ValueError):
         return ""
+    finally:
+        if opened is not None:
+            opened.close()
     return data.decode("utf-8", "replace")
+
+
+def player_log_path() -> str:
+    """A path a player can write its own log to, empty until it does.
+
+    mpv runs with --no-terminal, so its output reaches neither the terminal
+    nor the stderr handle we hand it. Pointing --log-file here is what gives
+    the settle window anything to report, which is the point of --debug.
+    """
+    fd, path = tempfile.mkstemp(prefix="watch-smthn-player-", suffix=".log")
+    os.close(fd)
+    return path
+
+
+def discard_log(path: Optional[str]) -> None:
+    """Drop a player log file; only its one read was ever wanted."""
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 _SUMMARY_HINT = re.compile(
@@ -110,14 +146,23 @@ _SUMMARY_HINT = re.compile(
 )
 
 
+_ERROR_LEVEL = re.compile(r"\]\[e\]\[")
+
+
 def summarize(text: str, line_width: int = 160) -> str:
-    """Collapse raw player output to the couple of lines worth showing."""
+    """Collapse raw player output to the couple of lines worth showing.
+
+    A player that ranks its own output by severity beats plain recency: mpv
+    ends a failed launch with teardown noise that matches every hint, while
+    the lines it tagged as errors are the cause worth showing.
+    """
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     if not lines:
         return ""
-    interesting = [ln for ln in lines if _SUMMARY_HINT.search(ln)]
-    chosen = interesting[-2:] or lines[-2:]
-    return " | ".join(ln[:line_width] for ln in chosen)
+    ranked = ([ln for ln in lines if _ERROR_LEVEL.search(ln)]
+              or [ln for ln in lines if _SUMMARY_HINT.search(ln)]
+              or lines)
+    return " | ".join(ln[:line_width] for ln in ranked[-2:])
 
 
 def _running(pid: int) -> bool:

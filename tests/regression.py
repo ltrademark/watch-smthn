@@ -542,6 +542,15 @@ def unit_url_validation():
           "no such file" in tail, repr(tail[-80:]))
     check("N summarize picks the failure line",
           "no such file" in summarize(tail), repr(summarize(tail)))
+    mpv_log = "\n".join([
+        "verbose startup line",
+        "[   0.024][e][stream] Failed to open https://dead.example/x.m3u8.",
+        "[   0.025][i][cplayer] Exiting... (Errors when loading file)",
+        "[   0.027][v][videoclip] Subprocess failed: killed"])
+    mpv_summary = summarize(mpv_log)
+    check("N summarize prefers the player's own error lines",
+          "Failed to open" in mpv_summary and "Subprocess failed" not in mpv_summary,
+          repr(mpv_summary))
     one = summarize(tail)
     check("N summarize stays on one short line",
           "\n" not in one and len(one) <= 320, repr(one))
@@ -684,6 +693,64 @@ def unit_detach():
           str(launch_src.count("detach=True")))
 
 
+def unit_player_log():
+    print("\n[Q] player log capture")
+    import watch_smthn.launchers as L
+    from watch_smthn.models import Player, PlayerType
+    from watch_smthn.players import launch_player
+
+    path = L.player_log_path()
+    check("Q player_log_path hands back an existing file",
+          Path(path).is_file(), path)
+    L.discard_log(path)
+    check("Q discard_log removes the file",
+          not Path(path).exists(), path)
+    check("Q discard_log(None) is a no-op", L.discard_log(None) is None, "")
+
+    logdir = Path(tempfile.mkdtemp(prefix="player-log-"))
+    target = logdir / "player.log"
+    target.write_text("quiet line\n[ffmpeg] something failed: no such file\n")
+    check("Q read_tail reads a path as well as a handle",
+          "no such file" in L.read_tail(target), repr(L.read_tail(target)[-60:]))
+    check("Q read_tail of a missing path is empty",
+          L.read_tail(target / "absent.log") == "", "")
+
+    class FakeSubprocess:
+        DEVNULL = "DEVNULL"
+        CREATE_NO_WINDOW = 0x08000000
+
+        def __init__(self):
+            self.calls = {}
+
+        def Popen(self, *args, **kwargs):
+            self.calls = {"args": args, "kwargs": kwargs}
+            return "PROC"
+
+    fake = FakeSubprocess()
+    url = "http://example.invalid/s.m3u8"
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        launch_player(Player(name="MPV", player_type=PlayerType.MPV,
+                             command=["mpv"], args=["--no-terminal"]),
+                      url, log_file="/tmp/player.log")
+    argv = fake.calls["args"][0]
+    check("Q mpv is pointed at its own log file",
+          "--log-file=/tmp/player.log" in argv, str(argv))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        launch_player(Player(name="ffplay", player_type=PlayerType.FFPLAY,
+                             command=["ffplay"]), url, log_file="/tmp/player.log")
+    argv = fake.calls["args"][0]
+    check("Q a player with no --log-file is left alone",
+          all(not a.startswith("--log-file") for a in argv), str(argv))
+
+    with patched(L, "subprocess", fake), patched(L.sys, "platform", "linux"):
+        launch_player(Player(name="MPV", player_type=PlayerType.MPV,
+                             command=["mpv"]), url)
+    argv = fake.calls["args"][0]
+    check("Q no log path means no --log-file flag",
+          all(not a.startswith("--log-file") for a in argv), str(argv))
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -818,6 +885,63 @@ async def session_main():
             app._launch(chan, browser)
         check("K missing binary names the binary in the toast",
               bool(notes) and "mpv not found" in notes[-1], str(notes))
+
+        print("\n[R] player log behind --debug")
+        from watch_smthn.launchers import player_log_path
+
+        seen = {}
+
+        def capture_launch(p, u, **kw):
+            seen.update(kw)
+            return None
+
+        def capture_watch(label, proc, sink, **kw):
+            seen["watch"] = dict(kw)
+
+        with patched(appmod, "is_enabled", lambda: True), \
+                patched(appmod, "player_log_path", lambda: "/tmp/never-created.log"), \
+                patched(appmod, "launch_player", capture_launch), \
+                patched(app, "_watch_launch", capture_watch), \
+                patched(app, "notify", capture):
+            app._launch(chan, browser)
+        check("R debug on hands the player a log file",
+              seen.get("log_file") == "/tmp/never-created.log", str(seen))
+        check("R the log path reaches the settle window",
+              seen.get("watch", {}).get("log_path") == "/tmp/never-created.log",
+              str(seen.get("watch")))
+
+        seen.clear()
+        with patched(appmod, "is_enabled", lambda: False), \
+                patched(appmod, "launch_player", capture_launch), \
+                patched(app, "_watch_launch", capture_watch), \
+                patched(app, "notify", capture):
+            app._launch(chan, browser)
+        check("R debug off launches with no log file",
+              seen.get("log_file") is None, str(seen))
+
+        class DeadPlayer:
+            pid = 0
+
+            def poll(self):
+                return 7
+
+        log = player_log_path()
+        Path(log).write_text(
+            "verbose startup line\n" * 100
+            + "[   0.024][e][stream] Failed to open https://dead.example/x.m3u8.\n"
+            + "[   0.025][i][cplayer] Exiting... (Errors when loading file)\n"
+            + "[   0.027][v][videoclip] Subprocess failed: killed\n")
+        notes.clear()
+        with patched(app, "notify", capture):
+            app._watch_launch("LogChan", DeadPlayer(), appmod.open_sink(),
+                              delay=0.05, log_path=log)
+            await pilot.pause(0.5)
+        check("R the player log stands in for stderr in the toast",
+              any("Failed to open" in n for n in notes), str(notes))
+        check("R the log is read far enough back to hold the cause",
+              not any("Subprocess failed" in n for n in notes), str(notes))
+        check("R the player log is cleaned up afterwards",
+              not Path(log).exists(), log)
 
 
 def fake_config(extra_sources=None, twitch_urls=None):
@@ -1033,6 +1157,7 @@ async def main():
     unit_url_validation()
     unit_reaping()
     unit_detach()
+    unit_player_log()
     await session_main()
     await order_main()
     await add_source_main()

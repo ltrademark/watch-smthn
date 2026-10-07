@@ -67,7 +67,8 @@ def find_available_players(players: list[Player] | None = None,
 
 def launch_player(player: Player, url: str,
                   sink: Optional[BinaryIO] = None,
-                  detach: bool = False) -> Optional[SpawnedProcess]:
+                  detach: bool = False,
+                  log_file: Optional[str] = None) -> Optional[SpawnedProcess]:
     if player.player_type == PlayerType.WEB:
         dbg(f"open in browser: {url}")
         return open_url(url, sink)
@@ -75,5 +76,11 @@ def launch_player(player: Player, url: str,
     if not cmd:
         dbg(f"launch {player.name}: empty command, refusing")
         return None
+    if log_file:
+        if player.player_type == PlayerType.MPV:
+            cmd = [*cmd, f"--log-file={log_file}"]
+            dbg(f"player log for {player.name}: {log_file}")
+        else:
+            dbg(f"player log ignored, {player.name} has no --log-file")
     dbg(f"launch {player.name}: {cmd}")
     return spawn(cmd, stderr=sink, detach=detach)

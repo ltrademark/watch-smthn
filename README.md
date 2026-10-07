@@ -43,6 +43,8 @@ Traces the decisions behind a launch to `~/.config/watch-smthn/debug.log`: which
 
 Nothing is logged unless you ask for it, and the file sits outside the repository so the TUI keeps the terminal to itself.
 
+mpv runs with `--no-terminal`, so its own messages reach neither the terminal nor the handle the app captures. Under `--debug` it is handed a log file of its own instead, which is what the failure toast reads from once the settle window closes; that file is removed after the one read.
+
 ### When a launch fails
 
 Before a URL reaches a player it is checked structurally: an empty row, a missing `http://` scheme, or an unsupported scheme is refused with a toast naming the reason rather than being handed on to fail in silence.

@@ -39,9 +39,10 @@ from .config import (
     save_custom_source_to_config,
     save_handle_to_config,
 )
-from .debug import dbg, dbg_error
+from .debug import dbg, dbg_error, is_enabled
 from .favorites import load_favorites, toggle_favorite
-from .launchers import check_launchable, open_in_editor, open_sink, read_tail, spawn, summarize
+from .launchers import (check_launchable, discard_log, open_in_editor, open_sink,
+                        player_log_path, read_tail, spawn, summarize)
 from .m3u_parser import load_playlist_auto
 from .models import Channel, ContentType, EntryMeta, Player, Playlist
 from .players import DEFAULT_PLAYERS, find_available_players, launch_player
@@ -1325,34 +1326,42 @@ class WatchSmthnApp(App):
                 self._watch_launch(platform, proc, sink)
             return
         sink = open_sink()
+        log_path = player_log_path() if is_enabled() else None
         try:
-            proc = launch_player(player, channel.url, sink=sink, detach=True)
+            proc = launch_player(player, channel.url, sink=sink, detach=True,
+                                 log_file=log_path)
         except FileNotFoundError as e:
             sink.close()
+            discard_log(log_path)
             dbg_error("player launch failed", e)
             missing = e.filename or player.name
             self.notify(f"{missing} not found — is it installed and on PATH?",
                         severity="error")
         except OSError as e:
             sink.close()
+            discard_log(log_path)
             dbg_error("player launch failed", e)
             self.notify(f"Failed to launch {player.name}: {e}", severity="error")
         else:
             self.notify(f"Playing {channel.name} in {player.name}",
                         severity="information")
-            self._watch_launch(player.name, proc, sink)
+            self._watch_launch(player.name, proc, sink, log_path=log_path)
 
-    def _watch_launch(self, label: str, proc, sink, delay: float = 1.5) -> None:
+    def _watch_launch(self, label: str, proc, sink, delay: float = 1.5,
+                      log_path: Optional[str] = None) -> None:
         """Report a player that dies right after starting, rather than guessing.
 
         A player still alive when the delay elapses is treated as healthy: its
-        own copy of the stderr handle keeps working after we close ours.
+        own copy of the stderr handle keeps working after we close ours. A
+        player logging to a file of its own is read from there instead, since
+        --no-terminal keeps it away from the stderr handle entirely.
         """
         if proc is None:
             try:
                 sink.close()
             except OSError:
                 pass
+            discard_log(log_path)
             return
         self._track(proc)
 
@@ -1360,8 +1369,10 @@ class WatchSmthnApp(App):
             try:
                 code = proc.poll()
                 tail = read_tail(sink)
+                if log_path:
+                    tail = read_tail(log_path, limit=4000) or tail
                 if tail:
-                    dbg(f"{label} stderr: {tail}")
+                    dbg(f"{label} output: {tail}")
                 if code:
                     summary = summarize(tail)
                     dbg(f"{label} exited with code {code}")
@@ -1379,6 +1390,7 @@ class WatchSmthnApp(App):
                     sink.close()
                 except OSError:
                     pass
+                discard_log(log_path)
 
         self.set_timer(delay, settle)
 

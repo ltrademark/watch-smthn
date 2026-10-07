@@ -43,6 +43,12 @@ Traces the decisions behind a launch to `~/.config/watch-smthn/debug.log`: which
 
 Nothing is logged unless you ask for it, and the file sits outside the repository so the TUI keeps the terminal to itself.
 
+### When a launch fails
+
+Before a URL reaches a player it is checked structurally: an empty row, a missing `http://` scheme, or an unsupported scheme is refused with a toast naming the reason rather than being handed on to fail in silence.
+
+After that the app does not second-guess the stream. A couple of seconds after launching, if the player exited with a failure the toast shows the useful lines from its own output, such as the ffmpeg error behind a dead source. A player still running is left alone. Nothing is ever blocked on a pre-flight network check, because plenty of live sources reject a plain probe while opening normally in a real player.
+
 ## Keybinds
 
 | Key           | Action                |

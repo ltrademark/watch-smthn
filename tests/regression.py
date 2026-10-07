@@ -509,6 +509,56 @@ def unit_debug():
           D.is_enabled() is False and "written after disable" not in leftover, "still writing")
 
 
+def unit_url_validation():
+    print("\n[N] URL validation and player diagnostics")
+    from watch_smthn.launchers import check_launchable, open_sink, read_tail, summarize
+
+    check("N empty URL is refused",
+          check_launchable("") == "this channel has no URL", str(check_launchable("")))
+    check("N whitespace URL is refused",
+          check_launchable("   ") is not None, str(check_launchable("   ")))
+    bare = check_launchable("example.com/live/stream.m3u8")
+    check("N missing scheme is refused",
+          bool(bare) and bare.startswith("the URL is missing"), str(bare))
+    odd = check_launchable("javascript:alert(1)")
+    check("N unsupported scheme is refused",
+          bool(odd) and odd.startswith("unsupported scheme"), str(odd))
+    check("N host-less URL is refused",
+          check_launchable("http://") == "the URL has no host", str(check_launchable("http://")))
+    good = ["https://example.com/a.m3u8",
+            "http://192.168.1.9:8080/live/x.ts",
+            "rtmp://host/app/key",
+            "file:///tmp/v.mkv"]
+    check("N well formed URLs are allowed",
+          all(check_launchable(u) is None for u in good),
+          str([u for u in good if check_launchable(u)]))
+
+    sink = open_sink()
+    sink.write(b"quiet line\n[ffmpeg] something failed: no such file\nlast words\n")
+    sink.flush()
+    tail = read_tail(sink)
+    sink.close()
+    check("N read_tail returns the captured stderr",
+          "no such file" in tail, repr(tail[-80:]))
+    check("N summarize picks the failure line",
+          "no such file" in summarize(tail), repr(summarize(tail)))
+    one = summarize(tail)
+    check("N summarize stays on one short line",
+          "\n" not in one and len(one) <= 320, repr(one))
+    check("N summarize of empty output is empty", summarize("") == "", "not empty")
+
+    from watch_smthn.models import Channel
+    from watch_smthn.players import DEFAULT_PLAYERS
+    bare_app = WatchSmthnApp()
+    notes = []
+    capture = lambda msg="", *a, **k: notes.append(str(msg))
+    mpv = next(p for p in DEFAULT_PLAYERS if p.name == "MPV")
+    with patched(bare_app, "notify", capture):
+        bare_app._launch(Channel(name="Broken", url=""), mpv)
+    check("N launch refuses a channel with no URL",
+          any("Cannot play Broken" in n for n in notes), str(notes))
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -628,13 +678,13 @@ async def session_main():
         capture = lambda msg="", *a, **k: notes.append(str(msg))
 
         with patched(app, "notify", capture), \
-                patched(appmod, "launch_player", lambda p, u: None):
+                patched(appmod, "launch_player", lambda p, u, sink=None: None):
             app._launch(chan, browser)
         check("K launch without a handle still reports success",
               any("Playing ReportChan in Open in browser" in n for n in notes),
               str(notes))
 
-        def missing(p, u):
+        def missing(p, u, sink=None):
             raise FileNotFoundError(2, "No such file or directory", "mpv")
 
         notes.clear()
@@ -855,6 +905,7 @@ async def main():
     unit_launchers()
     unit_config_overrides()
     unit_debug()
+    unit_url_validation()
     await session_main()
     await order_main()
     await add_source_main()

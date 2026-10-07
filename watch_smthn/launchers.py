@@ -8,12 +8,15 @@ around the call.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import BinaryIO, Optional
+from urllib.parse import urlparse
 
 from .debug import dbg, dbg_error
 
@@ -60,10 +63,67 @@ def normalize_path(value: str) -> str:
     return f"/mnt/{value[0].lower()}/{tail}"
 
 
-def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
+_LAUNCHABLE_SCHEMES = frozenset({"http", "https", "rtmp", "rtmps", "rtsp", "file"})
+
+
+def check_launchable(url: Optional[str]) -> Optional[str]:
+    """Return why a URL cannot be handed to a player, or None when it can.
+
+    Deliberately structural only. Whether the stream actually plays is decided
+    by the player itself, because an HTTP probe would reject plenty of live
+    sources that a real client opens without trouble.
+    """
+    text = (url or "").strip()
+    if not text:
+        return "this channel has no URL"
+    parsed = urlparse(text)
+    if not parsed.scheme:
+        return "the URL is missing its http:// scheme"
+    if parsed.scheme.lower() not in _LAUNCHABLE_SCHEMES:
+        return f"unsupported scheme {parsed.scheme!r}"
+    if parsed.scheme.lower() != "file" and not parsed.netloc:
+        return "the URL has no host"
+    return None
+
+
+def open_sink() -> BinaryIO:
+    """A stderr target that outlives the call and can be read back later."""
+    return tempfile.TemporaryFile(mode="w+b")
+
+
+def read_tail(sink: BinaryIO, limit: int = 800) -> str:
+    try:
+        sink.flush()
+        sink.seek(0, os.SEEK_END)
+        size = sink.tell()
+        sink.seek(max(0, size - limit))
+        data = sink.read()
+    except (OSError, ValueError):
+        return ""
+    return data.decode("utf-8", "replace")
+
+
+_SUMMARY_HINT = re.compile(
+    r"error|fail|invalid|denied|refused|no such|unable|not found|unsupported|denied",
+    re.I,
+)
+
+
+def summarize(text: str, line_width: int = 160) -> str:
+    """Collapse raw player output to the couple of lines worth showing."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    interesting = [ln for ln in lines if _SUMMARY_HINT.search(ln)]
+    chosen = interesting[-2:] or lines[-2:]
+    return " | ".join(ln[:line_width] for ln in chosen)
+
+
+def spawn(argv: list[str], *, stderr: Optional[BinaryIO] = None) -> Optional[subprocess.Popen]:
     if not argv:
         dbg("spawn: empty argv, nothing to run")
         return None
+    sink = subprocess.DEVNULL if stderr is None else stderr
     dbg(f"spawn: {argv}")
     try:
         if _is_windows():
@@ -71,7 +131,7 @@ def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
                 argv,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=sink,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
@@ -80,7 +140,7 @@ def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
                 shell=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=sink,
                 start_new_session=True,
             )
     except BaseException as exc:
@@ -90,11 +150,11 @@ def spawn(argv: list[str]) -> Optional[subprocess.Popen]:
     return proc
 
 
-def open_url(url: str) -> Optional[subprocess.Popen]:
+def open_url(url: str, sink: Optional[BinaryIO] = None) -> Optional[subprocess.Popen]:
     if _is_windows():
         os.startfile(url)
         return None
-    return spawn(["xdg-open", url])
+    return spawn(["xdg-open", url], stderr=sink)
 
 
 def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subprocess.Popen]:

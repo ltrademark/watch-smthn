@@ -41,7 +41,7 @@ from .config import (
 )
 from .debug import dbg, dbg_error
 from .favorites import load_favorites, toggle_favorite
-from .launchers import open_in_editor, spawn
+from .launchers import check_launchable, open_in_editor, open_sink, read_tail, spawn, summarize
 from .m3u_parser import load_playlist_auto
 from .models import Channel, ContentType, EntryMeta, Player, Playlist
 from .players import DEFAULT_PLAYERS, find_available_players, launch_player
@@ -1297,31 +1297,80 @@ class WatchSmthnApp(App):
 
     def _launch(self, channel: Channel, player: Player) -> None:
         dbg(f"launch: {channel.name!r} via {player.name!r} url={channel.url!r}")
+        problem = check_launchable(channel.url)
+        if problem:
+            dbg(f"launch refused: {problem}")
+            self.notify(f"Cannot play {channel.name}: {problem}", severity="error")
+            return
         if channel.extra.get("streamlink"):
             quality = channel.extra.get("quality", "best")
             url = channel.url
             cmd = build_streamlink_command(url, quality)
             dbg(f"streamlink command: {cmd}")
+            sink = open_sink()
             try:
-                spawn(cmd)
-                platform = channel.extra.get("platform", "streamlink")
-                self.notify(f"Playing {channel.name} via {platform}", severity="information")
+                proc = spawn(cmd, stderr=sink)
             except FileNotFoundError:
+                sink.close()
                 self.notify("streamlink not found — install it first", severity="error")
             except Exception as e:
+                sink.close()
                 dbg_error("streamlink launch failed", e)
                 self.notify(f"Failed to launch streamlink: {e}", severity="error")
+            else:
+                platform = channel.extra.get("platform", "streamlink")
+                self.notify(f"Playing {channel.name} via {platform}", severity="information")
+                self._watch_launch(platform, proc, sink)
             return
+        sink = open_sink()
         try:
-            launch_player(player, channel.url)
+            proc = launch_player(player, channel.url, sink=sink)
         except FileNotFoundError as e:
+            sink.close()
             dbg_error("player launch failed", e)
             missing = e.filename or player.name
             self.notify(f"{missing} not found — is it installed and on PATH?",
                         severity="error")
         except OSError as e:
+            sink.close()
             dbg_error("player launch failed", e)
             self.notify(f"Failed to launch {player.name}: {e}", severity="error")
         else:
             self.notify(f"Playing {channel.name} in {player.name}",
                         severity="information")
+            self._watch_launch(player.name, proc, sink)
+
+    def _watch_launch(self, label: str, proc, sink, delay: float = 1.5) -> None:
+        """Report a player that dies right after starting, rather than guessing.
+
+        A player still alive when the delay elapses is treated as healthy: its
+        own copy of the stderr handle keeps working after we close ours.
+        """
+        if proc is None:
+            try:
+                sink.close()
+            except OSError:
+                pass
+            return
+
+        def settle() -> None:
+            try:
+                code = proc.poll()
+                tail = read_tail(sink)
+                if tail:
+                    dbg(f"{label} stderr: {tail}")
+                if code:
+                    summary = summarize(tail)
+                    dbg(f"{label} exited with code {code}")
+                    self.notify(f"{label} exited: {summary}" if summary
+                                else f"{label} exited with code {code}",
+                                severity="error")
+                else:
+                    dbg(f"{label} survived the settle window")
+            finally:
+                try:
+                    sink.close()
+                except OSError:
+                    pass
+
+        self.set_timer(delay, settle)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import replace
-from typing import Optional
+from typing import BinaryIO, Optional
 
 from .debug import dbg
 from .launchers import normalize_path, open_url, resolve_executable, spawn
@@ -65,13 +65,14 @@ def find_available_players(players: list[Player] | None = None,
     return available
 
 
-def launch_player(player: Player, url: str) -> Optional[subprocess.Popen]:
+def launch_player(player: Player, url: str,
+                  sink: Optional[BinaryIO] = None) -> Optional[subprocess.Popen]:
     if player.player_type == PlayerType.WEB:
         dbg(f"open in browser: {url}")
-        return open_url(url)
+        return open_url(url, sink)
     cmd = player.build_command(url)
     if not cmd:
         dbg(f"launch {player.name}: empty command, refusing")
         return None
     dbg(f"launch {player.name}: {cmd}")
-    return spawn(cmd)
+    return spawn(cmd, stderr=sink)

@@ -186,6 +186,8 @@ editor: code
 
 `ctrl+e` splits this value the way a shell would, so `editor: "code --wait"` and `editor: "kitty -e vim"` both work. It is checked before `VISUAL` and `EDITOR`, which are only consulted when `editor` is unset.
 
+On Windows, with `editor` unset, the `.yaml` file association is used first. When there is no usable association, the editor is looked for in the known install locations in the order `code`, `notepad++`, `notepad`, and a machine with none of them reports all three by name instead of silently opening nothing. Under WSL the same Windows executables are found through `/mnt/c/...`.
+
 ### add-iptv-urls
 
 Adds playlist URLs to the built-in `iptv` source without redefining it.
@@ -213,7 +215,7 @@ A plain list appends and deduplicates. The mapping form takes `override` and `ur
 
 ### Editing
 
-`ctrl+e` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application. The editor is picked from `editor` in the config, then `VISUAL`, then `EDITOR`, then the platform default.
+`ctrl+e` opens the config file in your default editor, creating `~/.config/watch-smthn/config.yaml` from the bundled default if it does not exist yet. `ctrl+r` reloads the config without restarting the application. The editor is picked from `editor` in the config, then, on Windows, the file association for the file and then the known install locations of `code`, `notepad++` and `notepad`; elsewhere `VISUAL`, then `EDITOR`, then `nano`.
 
 ## Tests
 

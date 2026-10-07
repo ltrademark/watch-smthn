@@ -751,6 +751,76 @@ def unit_player_log():
           all(not a.startswith("--log-file") for a in argv), str(argv))
 
 
+def unit_windows_editor():
+    print("\n[S] Windows editor discovery")
+    import watch_smthn.launchers as L
+
+    config_path = Path("/tmp/watch-smthn-editor-win.yaml")
+    called = []
+
+    def no_spawn(argv, **kwargs):
+        called.append(list(argv))
+        return "PROC"
+
+    def no_association(target):
+        raise OSError(150, "No application associated with the specified file")
+
+    check("S editor candidates are tried in order",
+          L._EDITOR_CANDIDATES == ("code", "notepad++", "notepad"),
+          str(L._EDITOR_CANDIDATES))
+
+    started = []
+    with patched(L, "spawn", no_spawn), patched(L.sys, "platform", "win32"), \
+            patched(L.os, "startfile", started.append):
+        result = L.open_in_editor(config_path)
+    check("S a working file association is kept",
+          started == [str(config_path)] and called == [] and result is None,
+          f"startfile={started} spawn={called}")
+
+    code_exe = str(Path(tempfile.mkdtemp()) / "Code.exe")
+    with patched(L, "spawn", no_spawn), patched(L.sys, "platform", "win32"), \
+            patched(L.os, "startfile", no_association), \
+            patched(L.shutil, "which",
+                    lambda name: code_exe if name == "code.exe" else None):
+        L.open_in_editor(config_path)
+    check("S code is used once the association fails",
+          called == [[code_exe, str(config_path)]], str(called))
+
+    called.clear()
+    root = Path(tempfile.mkdtemp())
+    (root / "System32").mkdir()
+    (root / "System32" / "notepad.exe").write_text("", encoding="utf-8")
+    with patched(L, "spawn", no_spawn), patched(L.sys, "platform", "win32"), \
+            patched(L.os, "startfile", no_association), \
+            patched(L.shutil, "which", lambda name: None), \
+            patched(L, "_known_install_roots", lambda: [root]):
+        L.open_in_editor(config_path)
+    check("S notepad is found through the known install roots",
+          called == [[str(root / "System32" / "notepad.exe"), str(config_path)]],
+          str(called))
+
+    called.clear()
+    raised = None
+    with patched(L, "spawn", no_spawn), patched(L.sys, "platform", "win32"), \
+            patched(L.os, "startfile", no_association), \
+            patched(L.shutil, "which", lambda name: None), \
+            patched(L, "_known_install_roots", lambda: []):
+        try:
+            L.open_in_editor(config_path)
+        except FileNotFoundError as exc:
+            raised = exc
+    check("S an editor-less machine names everything it tried",
+          raised is not None and "code, notepad++, notepad" in str(raised)
+          and called == [], str(raised))
+
+    with patched_env(SystemRoot="C:\\Windows"):
+        roots = [str(r) for r in L._known_install_roots()]
+    check("S SystemRoot is a search root for notepad",
+          "C:\\Windows" in roots, str(roots))
+    check("S the Windows directory is reachable from WSL",
+          "/mnt/c/Windows" in roots, str(roots))
+
+
 async def session_main():
     app = WatchSmthnApp()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -1158,6 +1228,7 @@ async def main():
     unit_reaping()
     unit_detach()
     unit_player_log()
+    unit_windows_editor()
     await session_main()
     await order_main()
     await add_source_main()

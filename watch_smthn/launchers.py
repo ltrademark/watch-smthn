@@ -29,7 +29,15 @@ def _is_windows() -> bool:
 _KNOWN_INSTALL_PATHS: dict[str, tuple[str, ...]] = {
     "vlc": ("VideoLAN/VLC/vlc.exe", "Programs/VideoLAN/VLC/vlc.exe"),
     "mpv": ("mpv/mpv.exe", "Programs/mpv/mpv.exe"),
+    "code": ("Microsoft VS Code/Code.exe",
+             "Programs/Microsoft VS Code/Code.exe"),
+    "notepad++": ("Notepad++/notepad++.exe",),
+    "notepad": ("System32/notepad.exe",),
 }
+
+# Tried in order on Windows once the file association is not usable.  code
+# covers the common case, notepad is present on every Windows install.
+_EDITOR_CANDIDATES: tuple[str, ...] = ("code", "notepad++", "notepad")
 
 
 def _known_install_roots() -> list[Path]:
@@ -38,8 +46,12 @@ def _known_install_roots() -> list[Path]:
         value = os.environ.get(var)
         if value:
             roots.append(Path(value))
+    windows = os.environ.get("SystemRoot") or os.environ.get("windir")
+    if windows:
+        roots.append(Path(windows))
     roots.append(Path("/mnt/c/Program Files"))
     roots.append(Path("/mnt/c/Program Files (x86)"))
+    roots.append(Path("/mnt/c/Windows"))
     return roots
 
 
@@ -297,9 +309,26 @@ def open_in_editor(path: Path, editor: Optional[str] = None) -> Optional[subproc
         dbg(f"editor: configured {explicit!r} for {path}")
         return spawn([*explicit, str(path)])
     if _is_windows():
-        dbg(f"editor: os.startfile({path})")
-        os.startfile(str(path))
-        return None
+        try:
+            dbg(f"editor: os.startfile({path})")
+            os.startfile(str(path))
+            return None
+        except OSError as exc:
+            # No association for the file type is the usual reason, and it is
+            # the only reason worth swallowing: the editor list below is what
+            # makes ctrl+e work on a machine that never picked a .yaml default.
+            dbg_error("editor: file association unusable", exc)
+        for candidate in _EDITOR_CANDIDATES:
+            resolved = resolve_executable(candidate)
+            if resolved:
+                dbg(f"editor: {candidate} resolved to {resolved}")
+                return spawn([resolved, str(path)])
+        dbg(f"editor: none of {list(_EDITOR_CANDIDATES)} found")
+        raise FileNotFoundError(
+            errno.ENOENT,
+            os.strerror(errno.ENOENT),
+            ", ".join(_EDITOR_CANDIDATES),
+        )
     fallback = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
     argv = shlex.split(fallback) or ["nano"]
     term = os.environ.get("TERM_PROGRAM")

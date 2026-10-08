@@ -858,14 +858,17 @@ def unit_doctor():
     check("T the report names the opener and streamlink",
           "opener /usr/bin/xdg-open" in text and "streamlink missing" in text, text)
     check("T an optional tool is a warning, not a failure",
-          "warning streamlink missing" in text and "\nmissing " not in text, text)
+          "warning launcher, streamlink missing" in text
+          and "\nmissing " not in text, text)
+    check("T a launcher off PATH never changes the exit code", code == 0,
+          f"code={code}")
 
     code, text = report(lambda name: None)
     check("T no player at all fails the report",
           code == 1 and "missing player" in text and "status not ok" in text,
           f"code={code}")
     check("T a missing player is the only fatal gap",
-          "warning opener, streamlink missing" in text, text)
+          "warning launcher, opener, streamlink missing" in text, text)
 
     cfg = Path("/tmp/doctor-never-created.yaml")
     cfg.unlink(missing_ok=True)
@@ -894,6 +897,55 @@ def unit_doctor():
     check("T main runs the report and exits without a TUI",
           raised == 0 and "watch-smthn doctor" in out.getvalue(),
           f"exit={raised}")
+
+
+def unit_launcher():
+    print("\n[U] launcher on PATH")
+    import io
+    import types
+    from contextlib import redirect_stdout
+    import watch_smthn.doctor as D
+    import watch_smthn.launchers as L
+
+    def discover(executable, platform, found):
+        fake = types.SimpleNamespace(executable=executable, platform=platform)
+        with patched(D, "sys", fake), \
+                patched(L.shutil, "which", lambda name: found):
+            return D._launcher()
+
+    ours, on_path = discover("/tmp/u-venv/bin/python", "linux",
+                             "/tmp/u-venv/bin/watch-smthn")
+    check("U the launcher sits beside the interpreter",
+          str(ours) == "/tmp/u-venv/bin/watch-smthn", str(ours))
+    check("U finding itself on PATH means reachable", bool(on_path), str(ours))
+
+    _, on_path = discover("/tmp/u-venv/bin/python", "linux",
+                          "/tmp/older/bin/watch-smthn")
+    check("U a different install on PATH is not this one",
+          not on_path, str(on_path))
+
+    _, on_path = discover("/tmp/u-venv/bin/python", "linux", None)
+    check("U nothing on PATH is reported as not reachable", not on_path,
+          str(on_path))
+
+    ours, _ = discover("/c/app/.venv/Scripts/python.exe", "win32", None)
+    check("U the Windows launcher ends in .exe",
+          str(ours).endswith("watch-smthn.exe"), str(ours))
+
+    out = io.StringIO()
+    with patched(D, "load_config", lambda: {}), \
+            patched(D, "_config_path", lambda: (Path("/tmp/u-config.yaml"), False)), \
+            patched(D, "FAVORITES_FILE", Path("/tmp/u-favorites.json")), \
+            patched(D, "_launcher",
+                    lambda: (Path("/tmp/u-venv/bin/watch-smthn"), True)), \
+            patched(L.shutil, "which",
+                    lambda name: "/opt/mpv/mpv" if name == "mpv" else None), \
+            redirect_stdout(out):
+        code = D.run_doctor()
+    text = out.getvalue()
+    check("U a reachable launcher is reported without a warning",
+          code == 0 and "launcher /tmp/u-venv/bin/watch-smthn (on PATH)" in text
+          and "launcher missing" not in text, text)
 
 
 async def session_main():
@@ -1305,6 +1357,7 @@ async def main():
     unit_player_log()
     unit_windows_editor()
     unit_doctor()
+    unit_launcher()
     await session_main()
     await order_main()
     await add_source_main()

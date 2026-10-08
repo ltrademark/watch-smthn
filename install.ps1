@@ -44,6 +44,24 @@ if ($LASTEXITCODE -ne 0) {
     throw "pip install -e . failed"
 }
 
+# Put .venv\Scripts on the user PATH so the command works from any directory.
+# Only new terminals see it, so the report below still warns until then.
+$venvScripts = Join-Path $PSScriptRoot ".venv\Scripts"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$entries = @()
+if ($userPath) {
+    $entries = @($userPath -split ';' | Where-Object { $_ })
+}
+if ($entries -notcontains $venvScripts) {
+    try {
+        [Environment]::SetEnvironmentVariable("Path", (($entries + $venvScripts) -join ';'), "User")
+        Say "added $venvScripts to your user PATH (new terminals only)"
+    } catch {
+        Say "could not update your user PATH: $($_.Exception.Message)"
+        Say "  run it with: $venvScripts\watch-smthn.exe"
+    }
+}
+
 $report = (& ".\.venv\Scripts\python.exe" -m watch_smthn --doctor 2>&1 | Out-String)
 $doctorStatus = $LASTEXITCODE
 Write-Host $report
@@ -56,9 +74,18 @@ if ($report -match "missing player") {
 if ($report -match "warning .*streamlink") {
     Say "  optional:     winget install streamlink    (only for custom streamlink sources)"
 }
+if ($report -match "warning .*launcher") {
+    Say ""
+    Say "  PATH:         open a new terminal so .venv\Scripts is picked up"
+    Say "                until then, run .\.venv\Scripts\watch-smthn.exe"
+}
 
 if ($doctorStatus -eq 0) {
-    Say "Ready. Run it with:  .\.venv\Scripts\watch-smthn.exe"
+    if (Get-Command watch-smthn -ErrorAction SilentlyContinue) {
+        Say "Ready. Run it with:  watch-smthn"
+    } else {
+        Say "Ready. Run it with:  .\.venv\Scripts\watch-smthn.exe"
+    }
 }
 
 exit $doctorStatus

@@ -38,6 +38,25 @@ fi
 say "installing watch-smthn and its dependencies"
 ./.venv/bin/python -m pip install --quiet -e . || die "pip install -e . failed"
 
+# Put the command where this shell and future ones can find it, unless it is
+# already reachable some other way (an entry for .venv/bin on PATH does the
+# same job and is left alone).  The link is recreated when it dangles, so
+# moving the repository does not strand an old copy.
+ours="$here/.venv/bin/watch-smthn"
+link="$HOME/.local/bin/watch-smthn"
+if [ "$(command -v watch-smthn || true)" != "$ours" ]; then
+    if [ -L "$link" ] && [ "$(readlink "$link")" = "$ours" ]; then
+        :
+    else
+        mkdir -p "$HOME/.local/bin" || die "could not create $HOME/.local/bin"
+        if [ -e "$link" ] || [ -L "$link" ]; then
+            rm -f "$link" || die "could not replace $link"
+        fi
+        ln -sfn "$ours" "$link" || die "could not link $link to $ours"
+        say "linked $link -> $ours"
+    fi
+fi
+
 set +e
 report="$(./.venv/bin/python -m watch_smthn --doctor 2>&1)"
 doctor_status=$?
@@ -69,9 +88,20 @@ fi
 if printf '%s\n' "$report" | grep -q '^warning .*streamlink'; then
     say "  optional:       $installer streamlink    (only for custom streamlink sources)"
 fi
+if printf '%s\n' "$report" | grep -q '^warning .*launcher'; then
+    case "${SHELL:-}" in
+        */fish) say "  PATH:            fish_add_path ~/.local/bin    then open a new shell" ;;
+        *)      say '  PATH:            export PATH="$HOME/.local/bin:$PATH"    then open a new shell' ;;
+    esac
+    say "                   until then, run $link"
+fi
 
 if [ "$doctor_status" -eq 0 ]; then
-    say "Ready. Run it with:  ./.venv/bin/watch-smthn"
+    if [ "$(command -v watch-smthn || true)" = "$ours" ]; then
+        say "Ready. Run it with:  watch-smthn"
+    else
+        say "Ready. Run it with:  $link"
+    fi
 fi
 
 exit "$doctor_status"

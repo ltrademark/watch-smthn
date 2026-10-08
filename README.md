@@ -32,7 +32,9 @@ cd watch-smthn
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config. A script exits 1 when the report still finds no player and 2 when the script itself could not run, which is what CI keys off.
+Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), puts `watch-smthn` on `PATH`, and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config. A script exits 1 when the report still finds no player and 2 when the script itself could not run, which is what CI keys off.
+
+On Linux and WSL the command is linked into `~/.local/bin`; on Windows `.venv\Scripts` is appended to your user `PATH`. If the report still says it is not on `PATH`, add the line it prints to your shell profile and open a new terminal.
 
 To do it by hand instead:
 
@@ -47,9 +49,17 @@ python3 -m venv .venv
 watch-smthn --doctor
 ```
 
-One fact per line: where the config and favorites files are, what each player resolved to, which editor `ctrl+e` will use, the URL opener, and whether `streamlink` is present. It creates no files, launches nothing, and exits non-zero only when no player at all was found, which is what the install scripts key their hints off. The output is safe to paste into a bug report.
+One fact per line: where the config and favorites files are, which command `watch-smthn` resolves to and whether this shell can reach it, what each player resolved to, which editor `ctrl+e` will use, the URL opener, and whether `streamlink` is present. It creates no files, launches nothing, and exits non-zero only when no player at all was found, which is what the install scripts key their hints off. The output is safe to paste into a bug report.
+
+By hand, without the command on `PATH`: `.venv/bin/watch-smthn --doctor`.
 
 ## Run
+
+```bash
+watch-smthn
+```
+
+That is the install scripts' work. Without them, or before opening a new shell:
 
 ```bash
 .venv/bin/watch-smthn
@@ -60,7 +70,8 @@ One fact per line: where the config and favorites files are, what each player re
 ### Debugging
 
 ```bash
-.venv/bin/watch-smthn --debug
+watch-smthn --debug
+# or .venv/bin/watch-smthn --debug
 ```
 
 Traces the decisions behind a launch to `~/.config/watch-smthn/debug.log`: which config file was read, which `player_paths` override matched, the exact command built for a channel, the pid `spawn` got back, and the full traceback when it raises. Use `--debug-log PATH` to write somewhere else, or set `WATCH_SMTHN_DEBUG=1` to turn it on without changing how you launch the app.

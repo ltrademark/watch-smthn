@@ -21,6 +21,7 @@ from .launchers import EDITOR_CANDIDATES, OPENERS, resolve_executable
 from .models import PlayerType
 from .players import DEFAULT_PLAYERS, find_available_players
 
+
 def _version() -> str:
     try:
         return metadata.version("watch-smthn")
@@ -51,6 +52,19 @@ def _describe_editor(config: dict) -> str:
     return f"{resolve_executable(head) or 'missing'} ({default})"
 
 
+def _launcher() -> tuple[Path, bool]:
+    """This install's own command, and whether this shell can find it.
+
+    The command is the one sitting next to the interpreter running the report,
+    so an older copy somewhere else on PATH does not count as reachable.
+    """
+    name = "watch-smthn.exe" if sys.platform == "win32" else "watch-smthn"
+    ours = Path(sys.executable).parent / name
+    found = resolve_executable("watch-smthn")
+    on_path = found is not None and Path(found).resolve() == ours.resolve()
+    return ours, on_path
+
+
 def run_doctor() -> int:
     """Print the report and return 0 when this install can actually run."""
     config = load_config()
@@ -62,6 +76,10 @@ def run_doctor() -> int:
     lines.append(f"config {cfg} {'present' if present else 'missing'}")
     lines.append(f"favorites {FAVORITES_FILE} "
                  f"{'present' if FAVORITES_FILE.exists() else 'missing'}")
+
+    launcher, on_path = _launcher()
+    lines.append(f"launcher {launcher} "
+                 f"{'(on PATH)' if on_path else '(not on PATH)'}")
 
     players = DEFAULT_PLAYERS + get_custom_players(config)
     available = find_available_players(players, get_player_paths(config))
@@ -86,11 +104,14 @@ def run_doctor() -> int:
 
     # Only a missing player stops the app from playing anything at all, so it
     # alone decides the exit code.  The rest are reported for the install
-    # scripts to hint about without failing a working installation.
+    # scripts to hint about without failing a working installation.  A
+    # launcher that is not on PATH is one of those: it still runs by path.
     gaps = []
     warnings = []
     if not local:
         gaps.append("player")
+    if not on_path:
+        warnings.append("launcher")
     if not opener:
         warnings.append("opener")
     if not stream:

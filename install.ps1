@@ -30,36 +30,50 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python 3.10 or newer is required"
 }
 
-# Computed up here because a PATH entry whose target is gone is evidence worth
-# reporting before anything is repaired. Only new terminals see these entries,
-# which is why the report below still warns until then.
-$venvScripts = Join-Path $PSScriptRoot ".venv\Scripts"
+# Windows keeps its own venv (.venv-win), so a clone shared with WSL serves a
+# PowerShell tab and an Ubuntu tab at the same time. The PATH work sits up
+# here because the old shared layout left an entry for .venv\Scripts behind
+# and that directory belongs to the Linux side now. Only new terminals see
+# these entries, which is why the report below still warns until then.
+$venvScripts = Join-Path $PSScriptRoot ".venv-win\Scripts"
+$legacyScripts = Join-Path $PSScriptRoot ".venv\Scripts"
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $entries = @()
 if ($userPath) {
     $entries = @($userPath -split ';' | Where-Object { $_ })
 }
-if (($entries -contains $venvScripts) -and -not (Test-Path ".\.venv\Scripts\watch-smthn.exe")) {
-    Say "note: watch-smthn.exe is missing from .venv\Scripts although it is on your PATH"
-    Say "      in a shared checkout that usually means install.sh (WSL) ran last"
+if ($entries -contains $legacyScripts) {
+    $entries = @($entries | Where-Object { $_ -ne $legacyScripts })
+    try {
+        $joined = $entries -join ';'
+        if (-not $entries) { $joined = $null }
+        [Environment]::SetEnvironmentVariable("Path", $joined, "User")
+        Say "removed the old PATH entry for .venv\Scripts (Windows now uses .venv-win)"
+    } catch {
+        Say "could not update your user PATH: $($_.Exception.Message)"
+    }
+}
+if (($entries -contains $venvScripts) -and -not (Test-Path ".\.venv-win\Scripts\watch-smthn.exe")) {
+    Say "note: watch-smthn.exe is missing from .venv-win\Scripts although it is on your PATH"
+    Say "      the venv is rebuilt below"
 }
 
 # Prove the venv runs rather than trusting that its launcher file exists: a
-# checkout shared with WSL can hold a Windows Scripts\ beside a pyvenv.cfg that
-# points at /usr/bin, so the file is there and the interpreter it names is not.
+# stray directory can hold a pyvenv.cfg pointing at an interpreter that is
+# not there, so the file is present and useless. A venv is entirely derived,
+# so rebuild it rather than fail later on a confusing missing-path error.
 $venvOk = $false
-if ((Test-Path ".\.venv\Scripts\python.exe") -and (Test-Path ".\.venv\pyvenv.cfg")) {
-    & ".\.venv\Scripts\python.exe" -c "pass" 2>&1 | Out-String | Out-Null
+if ((Test-Path ".\.venv-win\Scripts\python.exe") -and (Test-Path ".\.venv-win\pyvenv.cfg")) {
+    & ".\.venv-win\Scripts\python.exe" -c "pass" 2>&1 | Out-String | Out-Null
     $venvOk = ($LASTEXITCODE -eq 0)
 }
-if ((Test-Path ".venv") -and -not $venvOk) {
-    # A venv is entirely derived, so rebuild it rather than explain it.
-    if (Test-Path ".\.venv\bin") {
-        Say "rebuilding .venv: built for WSL/Linux (its bin\ is present); a shared checkout is one platform at a time"
+if ((Test-Path ".venv-win") -and -not $venvOk) {
+    if (Test-Path ".\.venv-win\bin") {
+        Say "rebuilding .venv-win: built for WSL/Linux (its bin\ is present)"
     } else {
-        Say "rebuilding .venv: it exists but cannot run on Windows"
+        Say "rebuilding .venv-win: it exists but cannot run on Windows"
     }
-    $cfg = ".\.venv\pyvenv.cfg"
+    $cfg = ".\.venv-win\pyvenv.cfg"
     if (Test-Path $cfg) {
         $homeLine = Select-String -Path $cfg -Pattern '^\s*home\s*=' | Select-Object -First 1
         if ($homeLine) {
@@ -67,27 +81,27 @@ if ((Test-Path ".venv") -and -not $venvOk) {
         }
     }
     try {
-        Remove-Item -Recurse -Force .venv -ErrorAction Stop
+        Remove-Item -Recurse -Force .venv-win -ErrorAction Stop
     } catch {
-        throw "could not remove the old .venv: $($_.Exception.Message)"
+        throw "could not remove the old .venv-win: $($_.Exception.Message)"
     }
 }
 
-if (-not (Test-Path ".venv")) {
-    Say "creating .venv"
-    & $python @pythonArgs -m venv .venv
+if (-not (Test-Path ".venv-win")) {
+    Say "creating .venv-win"
+    & $python @pythonArgs -m venv .venv-win
     if ($LASTEXITCODE -ne 0) {
-        throw "could not create .venv"
+        throw "could not create .venv-win"
     }
 }
 
 Say "installing watch-smthn and its dependencies"
-& ".\.venv\Scripts\python.exe" -m pip install --quiet -e .
+& ".\.venv-win\Scripts\python.exe" -m pip install --quiet -e .
 if ($LASTEXITCODE -ne 0) {
     throw "pip install -e . failed"
 }
 
-# Put .venv\Scripts on the user PATH so the command works from any directory.
+# Put .venv-win\Scripts on the user PATH so the command works from any directory.
 # The entry itself is computed near the top of this script.
 if ($entries -notcontains $venvScripts) {
     try {
@@ -99,7 +113,7 @@ if ($entries -notcontains $venvScripts) {
     }
 }
 
-$report = (& ".\.venv\Scripts\python.exe" -m watch_smthn --doctor 2>&1 | Out-String)
+$report = (& ".\.venv-win\Scripts\python.exe" -m watch_smthn --doctor 2>&1 | Out-String)
 $doctorStatus = $LASTEXITCODE
 Write-Host $report
 
@@ -113,15 +127,15 @@ if ($report -match "warning .*streamlink") {
 }
 if ($report -match "warning .*launcher") {
     Say ""
-    Say "  PATH:         open a new terminal so .venv\Scripts is picked up"
-    Say "                until then, run .\.venv\Scripts\watch-smthn.exe"
+    Say "  PATH:         open a new terminal so .venv-win\Scripts is picked up"
+    Say "                until then, run .\.venv-win\Scripts\watch-smthn.exe"
 }
 
 if ($doctorStatus -eq 0) {
     if (Get-Command watch-smthn -ErrorAction SilentlyContinue) {
         Say "Ready. Run it with:  watch-smthn"
     } else {
-        Say "Ready. Run it with:  .\.venv\Scripts\watch-smthn.exe"
+        Say "Ready. Run it with:  .\.venv-win\Scripts\watch-smthn.exe"
     }
 }
 

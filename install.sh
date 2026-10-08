@@ -31,14 +31,14 @@ if ! "$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; th
 fi
 
 # Defined up here because a link with no target is evidence worth reporting
-# before anything is repaired.
+# before anything is repaired. Windows keeps its own venv (.venv-win) and
+# never touches this one, so a dangling link is either a manual deletion or
+# the shared layout from before that split.
 ours="$here/.venv/bin/watch-smthn"
 link="$HOME/.local/bin/watch-smthn"
-# A dangling link is the other installer's fingerprint: it rebuilt .venv and
-# took this platform's launcher with it, while the PATH entry stayed behind.
 if [ -L "$link" ] && [ ! -e "$link" ]; then
     say "note: $link points at a .venv that no longer holds watch-smthn"
-    say "      in a shared checkout that usually means install.ps1 ran last"
+    say "      running this script puts it back; Windows uses .venv-win and leaves .venv alone"
 fi
 
 # Prove the venv runs rather than trusting that its python file exists: a
@@ -47,7 +47,7 @@ fi
 # rebuild it rather than fail later on a confusing missing-path error.
 if [ -d .venv ] && ! .venv/bin/python -c 'pass' >/dev/null 2>&1; then
     if [ -d .venv/Scripts ]; then
-        say 'rebuilding .venv: built for Windows (its Scripts\ is present); a shared checkout is one platform at a time'
+        say 'rebuilding .venv: it was built for Windows, before Windows moved to .venv-win'
     else
         say "rebuilding .venv: it exists but cannot run on this platform"
     fi

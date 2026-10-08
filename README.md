@@ -32,11 +32,11 @@ cd watch-smthn
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Each script creates `.venv`, installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), puts `watch-smthn` on `PATH`, and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config. A script exits 1 when the report still finds no player and 2 when the script itself could not run, which is what CI keys off.
+Each script creates its own venv (`.venv` for Linux and WSL, `.venv-win` for Windows), installs the two Python dependencies (`textual` and `pyyaml`, pulled in automatically from `pyproject.toml`), puts `watch-smthn` on `PATH`, and then prints a dependency report so a missing tool shows up here instead of as a silent failure later. Both are idempotent: running one again on a working install changes nothing, and neither touches your config. A script exits 1 when the report still finds no player and 2 when the script itself could not run, which is what CI keys off.
 
-On Linux and WSL the command is linked into `~/.local/bin`; on Windows `.venv\Scripts` is appended to your user `PATH`. If the report still says it is not on `PATH`, add the line it prints to your shell profile and open a new terminal.
+On Linux and WSL the command is linked into `~/.local/bin`; on Windows `.venv-win\Scripts` is appended to your user `PATH`. If the report still says it is not on `PATH`, add the line it prints to your shell profile and open a new terminal.
 
-**One clone, one platform at a time.** Two tabs of the same clone share `.venv`, and a venv holds a single interpreter, so whichever installer ran last owns it. In one Windows Terminal window with an Ubuntu tab and a PowerShell tab on the same clone: run `./install.sh` and the PowerShell tab loses the command (`watch-smthn` is not recognized, because `.venv\Scripts` no longer holds it), run `.\install.ps1` and the Ubuntu tab loses it (a dangling `~/.local/bin/watch-smthn`). Nothing is corrupted, re-running the installer for the tab you are in puts it back, and each script prints a `note:` line when it catches the situation, but the swap costs a reinstall every time. If you work on both sides daily, keep a separate clone for each and there is no conflict at all.
+**One clone, both tabs.** Because the two platforms keep separate venvs, an Ubuntu tab and a PowerShell tab of the same clone in one Windows Terminal window can both run `watch-smthn` without touching each other: each installer only ever manages its own directory. If the clone was installed before that split, run each script once to migrate. `.\install.ps1` moves your `PATH` entry from `.venv\Scripts` to `.venv-win\Scripts` and says so, while `./install.sh` reclaims `.venv` when it finds a Windows build in it and says so too.
 
 To do it by hand instead:
 
@@ -68,6 +68,8 @@ That is the install scripts' work. Without them, or before opening a new shell:
 # or
 .venv/bin/python -m watch_smthn
 ```
+
+On Windows, by hand: `.\.venv-win\Scripts\watch-smthn.exe`.
 
 ### Debugging
 

@@ -30,11 +30,15 @@ if ! "$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; th
     die "$("$python" --version 2>&1) is too old; 3.10 or newer is required"
 fi
 
-# A checkout shared with Windows or WSL can carry a venv built by the other
-# platform, which has no usable interpreter here. A venv is entirely derived,
-# so rebuild it rather than fail on a confusing missing-path error.
-if [ -d .venv ] && [ ! -x .venv/bin/python ]; then
-    say "rebuilding .venv: the existing one was created outside this platform (no .venv/bin/python)"
+# Prove the venv runs rather than trusting that its python file exists: a
+# checkout shared with Windows or WSL can hold one platform's interpreter
+# beside a pyvenv.cfg naming the other's. A venv is entirely derived, so
+# rebuild it rather than fail later on a confusing missing-path error.
+if [ -d .venv ] && ! .venv/bin/python -c 'pass' >/dev/null 2>&1; then
+    say "rebuilding .venv: it cannot run on this platform"
+    if [ -f .venv/pyvenv.cfg ]; then
+        grep -E '^[[:space:]]*home[[:space:]]*=' .venv/pyvenv.cfg | sed 's/^/  /' || true
+    fi
     rm -rf .venv || die "could not remove .venv"
 fi
 

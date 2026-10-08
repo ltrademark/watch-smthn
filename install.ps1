@@ -30,11 +30,24 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python 3.10 or newer is required"
 }
 
-if ((Test-Path ".venv") -and -not (Test-Path ".\.venv\Scripts\python.exe")) {
-    # A checkout shared with WSL carries a venv whose pyvenv.cfg points at
-    # /usr/bin, so Windows cannot run it and pip dies with a bare path error.
+# Prove the venv runs rather than trusting that its launcher file exists: a
+# checkout shared with WSL can hold a Windows Scripts\ beside a pyvenv.cfg that
+# points at /usr/bin, so the file is there and the interpreter it names is not.
+$venvOk = $false
+if ((Test-Path ".\.venv\Scripts\python.exe") -and (Test-Path ".\.venv\pyvenv.cfg")) {
+    & ".\.venv\Scripts\python.exe" -c "pass" 2>&1 | Out-String | Out-Null
+    $venvOk = ($LASTEXITCODE -eq 0)
+}
+if ((Test-Path ".venv") -and -not $venvOk) {
     # A venv is entirely derived, so rebuild it rather than explain it.
-    Say "rebuilding .venv: the existing one was created outside Windows (no .venv\Scripts\python.exe)"
+    Say "rebuilding .venv: it cannot run on Windows"
+    $cfg = ".\.venv\pyvenv.cfg"
+    if (Test-Path $cfg) {
+        $homeLine = Select-String -Path $cfg -Pattern '^\s*home\s*=' | Select-Object -First 1
+        if ($homeLine) {
+            Say "  $($homeLine.Line.Trim())"
+        }
+    }
     try {
         Remove-Item -Recurse -Force .venv -ErrorAction Stop
     } catch {

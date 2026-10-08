@@ -30,6 +30,14 @@ if ! "$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; th
     die "$("$python" --version 2>&1) is too old; 3.10 or newer is required"
 fi
 
+# A checkout shared with Windows or WSL can carry a venv built by the other
+# platform, which has no usable interpreter here. A venv is entirely derived,
+# so rebuild it rather than fail on a confusing missing-path error.
+if [ -d .venv ] && [ ! -x .venv/bin/python ]; then
+    say "rebuilding .venv: the existing one was created outside this platform (no .venv/bin/python)"
+    rm -rf .venv || die "could not remove .venv"
+fi
+
 if [ ! -d .venv ]; then
     say "creating .venv"
     "$python" -m venv .venv || die "could not create .venv; on Debian or Ubuntu run: sudo apt install python3-venv"

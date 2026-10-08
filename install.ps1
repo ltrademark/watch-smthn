@@ -30,6 +30,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python 3.10 or newer is required"
 }
 
+if ((Test-Path ".venv") -and -not (Test-Path ".\.venv\Scripts\python.exe")) {
+    # A checkout shared with WSL carries a venv whose pyvenv.cfg points at
+    # /usr/bin, so Windows cannot run it and pip dies with a bare path error.
+    # A venv is entirely derived, so rebuild it rather than explain it.
+    Say "rebuilding .venv: the existing one was created outside Windows (no .venv\Scripts\python.exe)"
+    try {
+        Remove-Item -Recurse -Force .venv -ErrorAction Stop
+    } catch {
+        throw "could not remove the old .venv: $($_.Exception.Message)"
+    }
+}
+
 if (-not (Test-Path ".venv")) {
     Say "creating .venv"
     & $python @pythonArgs -m venv .venv

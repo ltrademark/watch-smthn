@@ -36,7 +36,7 @@ Each script creates `.venv`, installs the two Python dependencies (`textual` and
 
 On Linux and WSL the command is linked into `~/.local/bin`; on Windows `.venv\Scripts` is appended to your user `PATH`. If the report still says it is not on `PATH`, add the line it prints to your shell profile and open a new terminal.
 
-One checkout, one platform at a time. `.venv` holds a single interpreter, so running the other platform's script over it rebuilds `.venv` for that platform and this platform's `watch-smthn` disappears with it: on Windows that surfaces as the command not being recognized, on Linux as a dangling `~/.local/bin` link. Each script prints a `note:` line when it catches that, and rebuilding again is the repair, which is why alternating the two scripts on one checkout costs a reinstall each way.
+**One clone, one platform at a time.** Two tabs of the same clone share `.venv`, and a venv holds a single interpreter, so whichever installer ran last owns it. In one Windows Terminal window with an Ubuntu tab and a PowerShell tab on the same clone: run `./install.sh` and the PowerShell tab loses the command (`watch-smthn` is not recognized, because `.venv\Scripts` no longer holds it), run `.\install.ps1` and the Ubuntu tab loses it (a dangling `~/.local/bin/watch-smthn`). Nothing is corrupted, re-running the installer for the tab you are in puts it back, and each script prints a `note:` line when it catches the situation, but the swap costs a reinstall every time. If you work on both sides daily, keep a separate clone for each and there is no conflict at all.
 
 To do it by hand instead:
 

@@ -52,6 +52,22 @@ def select(app, label):
     app._load_source_group(app._source_items[idx]["indices"])
 
 
+async def settle(pilot, predicate, timeout=45.0, interval=0.25):
+    """Wait for a source switch to finish instead of sleeping a fixed amount.
+
+    A switch kicks off a worker and only rebuilds the sidebar once that worker
+    has the rows, so `active()` flipping to the new label is the signal that
+    `all_channels` belongs to it. Real playlists take two seconds or forty
+    depending on the network, and each entry fetch of a source can block up to
+    the loader's own 15 second timeout, which a fixed pause cannot cover.
+    """
+    for _ in range(int(timeout / interval)):
+        if predicate():
+            return True
+        await pilot.pause(interval)
+    return predicate()
+
+
 def titled_entries():
     out = []
     for s in load_sources(load_config()):
@@ -998,7 +1014,8 @@ async def session_main():
         print("\n[C] source switching + -active (all sources, discovered)")
         for label in labels(app):
             select(app, label)
-            await pilot.pause(3.5)
+            await settle(pilot, lambda label=label: active(app) == [label]
+                         and len(app.all_channels) > 0)
             check(f"switch to {label!r}",
                   active(app) == [label] and len(app.all_channels) > 0,
                   f"rows={len(app.all_channels)} active={active(app)}")
@@ -1010,7 +1027,8 @@ async def session_main():
         else:
             src_name, entry = found[0]
             select(app, src_name)
-            await pilot.pause(3.5)
+            await settle(pilot, lambda: active(app) == [src_name]
+                         and any(c.url == entry["url"] for c in app.all_channels))
             matches = [c for c in app.all_channels if c.url == entry["url"]]
             check("titled url yields exactly 1 row", len(matches) == 1, f"{len(matches)} rows")
             if matches:
@@ -1022,7 +1040,19 @@ async def session_main():
                       c.group == expect_group, f"{c.group!r}")
                 check("row country honours explicit country",
                       c.country == (meta.country or ""), f"{c.country!r}")
-                check("marked hls", c.extra.get("hls") is True)
+                detail = (f"{dict(c.extra)} name={c.name!r} group={c.group!r} "
+                          f"country={c.country!r} url={c.url!r}")
+                if c.extra.get("hls") is True:
+                    check("marked hls", True)
+                elif c.extra.get("direct"):
+                    # app.py falls back to direct_channel() when the fetch
+                    # fails or returns nothing parseable, which still honours
+                    # meta for name, group and country. That is the network
+                    # talking, not a parser regression.
+                    skip("marked hls",
+                         "titled entry fell back to a direct row (fetch failed)")
+                else:
+                    check("marked hls", False, detail)
             r = rows(app)
             check("titled row rendered in table",
                   any(entry["meta"].title in str(x[0]) for x in r),

@@ -818,7 +818,7 @@ def unit_windows_editor():
     check("S SystemRoot is a search root for notepad",
           "C:\\Windows" in roots, str(roots))
     check("S the Windows directory is reachable from WSL",
-          "/mnt/c/Windows" in roots, str(roots))
+          str(Path("/mnt/c/Windows")) in roots, str(roots))
 
 
 def unit_doctor():
@@ -916,7 +916,7 @@ def unit_launcher():
     ours, on_path = discover("/tmp/u-venv/bin/python", "linux",
                              "/tmp/u-venv/bin/watch-smthn")
     check("U the launcher sits beside the interpreter",
-          str(ours) == "/tmp/u-venv/bin/watch-smthn", str(ours))
+          str(ours) == str(Path("/tmp/u-venv/bin/watch-smthn")), str(ours))
     check("U finding itself on PATH means reachable", bool(on_path), str(ours))
 
     _, on_path = discover("/tmp/u-venv/bin/python", "linux",
@@ -944,7 +944,8 @@ def unit_launcher():
         code = D.run_doctor()
     text = out.getvalue()
     check("U a reachable launcher is reported without a warning",
-          code == 0 and "launcher /tmp/u-venv/bin/watch-smthn (on PATH)" in text
+          code == 0
+          and f"launcher {Path('/tmp/u-venv/bin/watch-smthn')} (on PATH)" in text
           and "launcher missing" not in text, text)
 
 

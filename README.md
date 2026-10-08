@@ -16,6 +16,22 @@ This project uses the IPTV source lists from https://github.com/iptv-org/iptv. T
 
 ## Install
 
+Linux and WSL, one line (no git needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ltrademark/watch-smthn/master/watch-smthn.sh | bash
+```
+
+Windows, from PowerShell, one line (no git needed):
+
+```powershell
+irm https://raw.githubusercontent.com/ltrademark/watch-smthn/master/watch-smthn.ps1 | iex
+```
+
+Each one-liner downloads the source archive from GitHub into `~/.local/share/watch-smthn` (Windows: `%LOCALAPPDATA%\watch-smthn`) and runs the same installer a checkout gives you, so both routes end in the same place; the tree is identical, only its root differs, which is how the by-hand paths below work with the location swapped. Re-run the one-liner to update. It executes code from this repository without asking; download the script and read it first if you would rather not pipe it.
+
+With git, which is what you want if you plan to contribute:
+
 Linux and WSL:
 
 ```bash

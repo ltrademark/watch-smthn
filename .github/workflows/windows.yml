@@ -36,6 +36,18 @@ jobs:
           # runner; anything above it means the script itself broke.
           test "$code" -le 1
 
+      - name: One-liner script
+        if: runner.os == 'Linux'
+        run: |
+          set +e
+          git archive --format=tar.gz --prefix=watch-smthn-master/ -o "$RUNNER_TEMP/source.tar.gz" HEAD
+          cat watch-smthn.sh | HOME="$RUNNER_TEMP/home" \
+            WATCH_SMTHN_HOME="$RUNNER_TEMP/ws" \
+            WATCH_SMTHN_ARCHIVE_URL="file://$RUNNER_TEMP/source.tar.gz" bash
+          code=$?
+          set -e
+          test "$code" -le 1
+
       - name: Compile
         run: python -m compileall -q watch_smthn tests
 

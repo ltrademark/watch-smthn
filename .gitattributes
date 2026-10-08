@@ -1,0 +1,4 @@
+# Shell scripts must stay LF: bash chokes on the trailing CR, reporting
+# "set: pipefail: invalid option name" the moment it reaches line 9.
+# Windows checkouts with core.autocrlf=true would otherwise convert them.
+*.sh text eol=lf

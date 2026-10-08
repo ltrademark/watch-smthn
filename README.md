@@ -205,15 +205,16 @@ Four players are built in: MPV (default), VLC, ffplay, and Open in browser. The 
 
 ### player_paths
 
-Points a player at an executable that auto-discovery never finds. Keys are the built-in player keys (`mpv`, `vlc`, `ffplay`) or the player's `name`, values are the path.
+Points a player at an executable that auto-discovery never finds. Keys are the built-in player keys (`mpv`, `vlc`, `ffplay`), the player's `name`, or `streamlink` for the streamlink helper, values are the path.
 
 ```yaml
 player_paths:
   mpv: C:\ProgramData\chocolatey\lib\mpv.install\tools\mpv.exe
   VLC: /mnt/c/Program Files/VideoLAN/VLC/vlc.exe
+  streamlink: D:\tools\streamlink\streamlink.exe
 ```
 
-An override is used exactly as written, without an existence check, so a wrong path shows up as a failed launch naming the path instead of silently dropping the player. Under WSL a `C:\...` or `C:/...` value is rewritten to `/mnt/c/...` first, so the same line works on Windows and on Linux.
+An override is used exactly as written, without an existence check, so a wrong path shows up as a failed launch naming the path instead of silently dropping the player. Under WSL a `C:\...` or `C:/...` value is rewritten to `/mnt/c/...` first, so the same line works on Windows and on Linux. The default Windows install of streamlink (`C:\Program Files\Streamlink\bin`, or `/mnt/c/Program Files/Streamlink/bin` under WSL) is found on its own, so `streamlink:` is only needed for a custom location.
 
 ### editor
 

@@ -17,7 +17,8 @@ from pathlib import Path
 from .config import (CONFIG_DIRS, _find_config, get_custom_players,
                      get_editor, get_player_paths, load_config)
 from .favorites import FAVORITES_FILE
-from .launchers import EDITOR_CANDIDATES, OPENERS, resolve_executable
+from .launchers import (EDITOR_CANDIDATES, OPENERS, resolve_executable,
+                        resolve_tool)
 from .models import PlayerType
 from .players import DEFAULT_PLAYERS, find_available_players
 
@@ -99,7 +100,7 @@ def run_doctor() -> int:
 
     opener = next((name for name in OPENERS if resolve_executable(name)), None)
     lines.append(f"opener {resolve_executable(opener) if opener else 'missing'}")
-    stream = resolve_executable("streamlink")
+    stream = resolve_tool("streamlink", get_player_paths(config))
     lines.append(f"streamlink {stream or 'missing'}")
 
     # Only a missing player stops the app from playing anything at all, so it

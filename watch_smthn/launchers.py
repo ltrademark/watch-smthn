@@ -29,6 +29,7 @@ def _is_windows() -> bool:
 _KNOWN_INSTALL_PATHS: dict[str, tuple[str, ...]] = {
     "vlc": ("VideoLAN/VLC/vlc.exe", "Programs/VideoLAN/VLC/vlc.exe"),
     "mpv": ("mpv/mpv.exe", "Programs/mpv/mpv.exe"),
+    "streamlink": ("Streamlink/bin/streamlink.exe",),
     "code": ("Microsoft VS Code/Code.exe",
              "Programs/Microsoft VS Code/Code.exe"),
     "notepad++": ("Notepad++/notepad++.exe",),
@@ -65,6 +66,21 @@ def resolve_executable(name: str) -> Optional[str]:
             if candidate.is_file():
                 return str(candidate)
     return None
+
+
+def resolve_tool(name: str,
+                 overrides: Optional[dict[str, str]] = None) -> Optional[str]:
+    """Where to run a helper tool: a configured path first, then discovery.
+
+    The same rule find_available_players applies to players: an override is
+    used as written apart from the WSL rewrite, and without an existence
+    check, so a wrong path fails as a launch naming it instead of as a miss.
+    """
+    override = (overrides or {}).get(name)
+    if override:
+        dbg(f"{name}: using configured path {override!r}")
+        return normalize_path(override)
+    return resolve_executable(name)
 
 
 def normalize_path(value: str) -> str:

@@ -288,6 +288,16 @@ def unit_launchers():
     check("J resolve_executable falls back to a known install path",
           resolved == str(planted), str(resolved))
 
+    sl_root = Path(tempfile.mkdtemp(prefix="known-streamlink-"))
+    planted_sl = sl_root / "Streamlink" / "bin" / "streamlink.exe"
+    planted_sl.parent.mkdir(parents=True)
+    planted_sl.write_text("")
+    with patched(L.shutil, "which", lambda name: None), \
+            patched(L, "_known_install_roots", lambda: [sl_root]):
+        resolved_sl = L.resolve_executable("streamlink")
+    check("J streamlink is found in its default Windows install path",
+          resolved_sl == str(planted_sl), str(resolved_sl))
+
     bindir = Path(tempfile.mkdtemp(prefix="bindir-"))
     planted_mpv = bindir / ("mpv.exe" if os.name == "nt" else "mpv")
     planted_mpv.write_text("")
@@ -482,6 +492,29 @@ def unit_config_overrides():
           not any(t in str(fake.calls["args"]) for t in ("kitty", "xterm", "alacritty")),
           str(fake.calls["args"]))
 
+    from watch_smthn.streamers import build_streamlink_command
+
+    sl = "C:\\Program Files\\Streamlink\\bin\\streamlink.exe"
+    with patched(L.sys, "platform", "linux"):
+        got = L.resolve_tool("streamlink", {"streamlink": "/opt/sl/streamlink"})
+        check("L a configured streamlink path wins over discovery",
+              got == "/opt/sl/streamlink", str(got))
+        got = L.resolve_tool("streamlink", {"streamlink": sl})
+        check("L a configured streamlink path is rewritten under WSL",
+              got == "/mnt/c/Program Files/Streamlink/bin/streamlink.exe", str(got))
+    got = L.resolve_tool("streamlink", {})
+    check("L resolve_tool falls back to discovery without an override",
+          got == L.resolve_executable("streamlink"), str(got))
+    check("L the streamlink command runs the resolved executable",
+          build_streamlink_command("https://twitch.tv/x", "720p",
+                                   "/opt/sl/streamlink")
+          == ["/opt/sl/streamlink", "https://twitch.tv/x", "720p"],
+          str(build_streamlink_command("https://twitch.tv/x", "720p",
+                                       "/opt/sl/streamlink")))
+    check("L the streamlink command falls back to the bare name",
+          build_streamlink_command("https://twitch.tv/x")[0] == "streamlink",
+          str(build_streamlink_command("https://twitch.tv/x")))
+
 
 def unit_debug():
     print("\n[M] debug logging (--debug)")
@@ -582,6 +615,33 @@ def unit_url_validation():
         bare_app._launch(Channel(name="Broken", url=""), mpv)
     check("N launch refuses a channel with no URL",
           any("Cannot play Broken" in n for n in notes), str(notes))
+
+    argv = []
+    twitch = Channel(name="Twitch", url="https://www.twitch.tv/example",
+                     extra={"streamlink": True})
+    with patched(appmod, "load_config",
+                 lambda: {"player_paths": {"streamlink": "/opt/sl/streamlink"}}), \
+            patched(appmod, "spawn",
+                    lambda cmd, **kw: argv.append(cmd) or "PROC"), \
+            patched(bare_app, "_watch_launch", lambda *a, **k: None), \
+            patched(bare_app, "notify", capture):
+        bare_app._launch(twitch, mpv)
+    check("N a configured streamlink path is what launches",
+          argv and argv[0][0] == "/opt/sl/streamlink", str(argv))
+
+    notes.clear()
+
+    def missing_streamlink(cmd, **kw):
+        argv.append(cmd)
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+    with patched(appmod, "load_config",
+                 lambda: {"player_paths": {"streamlink": "/opt/sl/gone"}}), \
+            patched(appmod, "spawn", missing_streamlink), \
+            patched(bare_app, "notify", capture):
+        bare_app._launch(twitch, mpv)
+    check("N a streamlink miss names the path it tried",
+          any("/opt/sl/gone" in n for n in notes), str(notes))
 
 
 def unit_reaping():
@@ -850,9 +910,9 @@ def unit_doctor():
     args = build_parser().parse_args(["--doctor"])
     check("T --doctor parses", args.doctor is True, str(args.doctor))
 
-    def report(which):
+    def report(which, config=None):
         out = io.StringIO()
-        with patched(D, "load_config", lambda: {}), \
+        with patched(D, "load_config", lambda: config or {}), \
                 patched(D, "_config_path", lambda: (Path("/tmp/doctor-config.yaml"), False)), \
                 patched(D, "FAVORITES_FILE", Path("/tmp/doctor-favorites.json")), \
                 patched(L.shutil, "which", which), \
@@ -878,6 +938,11 @@ def unit_doctor():
           and "\nmissing " not in text, text)
     check("T a launcher off PATH never changes the exit code", code == 0,
           f"code={code}")
+
+    _, text = report(installed, {"player_paths": {"streamlink": "/opt/sl/streamlink"}})
+    check("T a configured streamlink path is what the report shows",
+          "streamlink /opt/sl/streamlink" in text
+          and "streamlink missing" not in text, text)
 
     code, text = report(lambda name: None)
     check("T no player at all fails the report",

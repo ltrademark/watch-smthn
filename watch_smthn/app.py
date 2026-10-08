@@ -42,7 +42,8 @@ from .config import (
 from .debug import dbg, dbg_error, is_enabled
 from .favorites import load_favorites, toggle_favorite
 from .launchers import (check_launchable, discard_log, open_in_editor, open_sink,
-                        player_log_path, read_tail, spawn, summarize)
+                        player_log_path, read_tail, resolve_tool, spawn,
+                        summarize)
 from .m3u_parser import load_playlist_auto
 from .models import Channel, ContentType, EntryMeta, Player, Playlist
 from .players import DEFAULT_PLAYERS, find_available_players, launch_player
@@ -1308,14 +1309,19 @@ class WatchSmthnApp(App):
         if channel.extra.get("streamlink"):
             quality = channel.extra.get("quality", "best")
             url = channel.url
-            cmd = build_streamlink_command(url, quality)
+            exe = resolve_tool("streamlink", get_player_paths(load_config()))
+            cmd = build_streamlink_command(url, quality, exe or "streamlink")
             dbg(f"streamlink command: {cmd}")
             sink = open_sink()
             try:
                 proc = spawn(cmd, stderr=sink, detach=True)
             except FileNotFoundError:
                 sink.close()
-                self.notify("streamlink not found — install it first", severity="error")
+                if exe:
+                    self.notify(f"streamlink not found at {exe}", severity="error")
+                else:
+                    self.notify("streamlink not found — install it first",
+                                severity="error")
             except Exception as e:
                 sink.close()
                 dbg_error("streamlink launch failed", e)

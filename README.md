@@ -45,6 +45,8 @@ python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
+**Which terminal.** Tested in Windows Terminal (PowerShell and WSL tabs) and plain Linux terminals. Classic conhost, the legacy Windows console, is unsupported: its raster font mangles the TUI's box drawing and emoji. Use Windows Terminal.
+
 ### Checking an installation
 
 ```bash

@@ -250,8 +250,15 @@ def _detach_script(argv: list[str]) -> str:
 
 def _spawn_detached(argv: list[str], sink: BinaryIO) -> DetachedProcess:
     program = argv[0]
+    # shutil.which() also demands the exec bit, while discovery only checks
+    # that the file exists. A path that is present but not runnable has to
+    # fail as Permission, not as "No such file or directory", which points
+    # the reader at a file that is sitting right there.
     if not shutil.which(program):
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), program)
+        if not os.path.isfile(program):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
+                                    program)
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), program)
     shell = subprocess.Popen(
         ["/bin/sh", "-c", _detach_script(argv)],
         stdin=subprocess.DEVNULL,

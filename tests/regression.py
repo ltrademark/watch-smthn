@@ -733,6 +733,18 @@ def unit_detach():
           handle is not None and handle.poll() is None,
           str(handle.poll() if handle else "no handle"))
 
+    unrunnable = Path(tempfile.mkdtemp(prefix="unrunnable-")) / "stream link"
+    unrunnable.write_text("#!/bin/sh\nexit 0\n")
+    unrunnable.chmod(0o644)
+    denied = None
+    try:
+        L.spawn([str(unrunnable)], detach=True)
+    except OSError as exc:
+        denied = exc
+    check("P an existing but unrunnable path fails as permission",
+          isinstance(denied, PermissionError) and "stream link" in str(denied),
+          str(denied))
+
     def ancestry_reaches_us(pid):
         seen = set()
         while pid and pid not in seen:

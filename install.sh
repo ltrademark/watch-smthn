@@ -30,12 +30,27 @@ if ! "$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; th
     die "$("$python" --version 2>&1) is too old; 3.10 or newer is required"
 fi
 
+# Defined up here because a link with no target is evidence worth reporting
+# before anything is repaired.
+ours="$here/.venv/bin/watch-smthn"
+link="$HOME/.local/bin/watch-smthn"
+# A dangling link is the other installer's fingerprint: it rebuilt .venv and
+# took this platform's launcher with it, while the PATH entry stayed behind.
+if [ -L "$link" ] && [ ! -e "$link" ]; then
+    say "note: $link points at a .venv that no longer holds watch-smthn"
+    say "      in a shared checkout that usually means install.ps1 ran last"
+fi
+
 # Prove the venv runs rather than trusting that its python file exists: a
 # checkout shared with Windows or WSL can hold one platform's interpreter
 # beside a pyvenv.cfg naming the other's. A venv is entirely derived, so
 # rebuild it rather than fail later on a confusing missing-path error.
 if [ -d .venv ] && ! .venv/bin/python -c 'pass' >/dev/null 2>&1; then
-    say "rebuilding .venv: it cannot run on this platform"
+    if [ -d .venv/Scripts ]; then
+        say 'rebuilding .venv: built for Windows (its Scripts\ is present); a shared checkout is one platform at a time'
+    else
+        say "rebuilding .venv: it exists but cannot run on this platform"
+    fi
     if [ -f .venv/pyvenv.cfg ]; then
         grep -E '^[[:space:]]*home[[:space:]]*=' .venv/pyvenv.cfg | sed 's/^/  /' || true
     fi
@@ -52,10 +67,8 @@ say "installing watch-smthn and its dependencies"
 
 # Put the command where this shell and future ones can find it, unless it is
 # already reachable some other way (an entry for .venv/bin on PATH does the
-# same job and is left alone).  The link is recreated when it dangles, so
-# moving the repository does not strand an old copy.
-ours="$here/.venv/bin/watch-smthn"
-link="$HOME/.local/bin/watch-smthn"
+# same job and is left alone).  The link is recreated when it points somewhere
+# else, so moving the repository does not strand an old copy.
 if [ "$(command -v watch-smthn || true)" != "$ours" ]; then
     if [ -L "$link" ] && [ "$(readlink "$link")" = "$ours" ]; then
         :

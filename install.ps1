@@ -30,6 +30,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python 3.10 or newer is required"
 }
 
+# Computed up here because a PATH entry whose target is gone is evidence worth
+# reporting before anything is repaired. Only new terminals see these entries,
+# which is why the report below still warns until then.
+$venvScripts = Join-Path $PSScriptRoot ".venv\Scripts"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$entries = @()
+if ($userPath) {
+    $entries = @($userPath -split ';' | Where-Object { $_ })
+}
+if (($entries -contains $venvScripts) -and -not (Test-Path ".\.venv\Scripts\watch-smthn.exe")) {
+    Say "note: watch-smthn.exe is missing from .venv\Scripts although it is on your PATH"
+    Say "      in a shared checkout that usually means install.sh (WSL) ran last"
+}
+
 # Prove the venv runs rather than trusting that its launcher file exists: a
 # checkout shared with WSL can hold a Windows Scripts\ beside a pyvenv.cfg that
 # points at /usr/bin, so the file is there and the interpreter it names is not.
@@ -40,7 +54,11 @@ if ((Test-Path ".\.venv\Scripts\python.exe") -and (Test-Path ".\.venv\pyvenv.cfg
 }
 if ((Test-Path ".venv") -and -not $venvOk) {
     # A venv is entirely derived, so rebuild it rather than explain it.
-    Say "rebuilding .venv: it cannot run on Windows"
+    if (Test-Path ".\.venv\bin") {
+        Say "rebuilding .venv: built for WSL/Linux (its bin\ is present); a shared checkout is one platform at a time"
+    } else {
+        Say "rebuilding .venv: it exists but cannot run on Windows"
+    }
     $cfg = ".\.venv\pyvenv.cfg"
     if (Test-Path $cfg) {
         $homeLine = Select-String -Path $cfg -Pattern '^\s*home\s*=' | Select-Object -First 1
@@ -70,13 +88,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Put .venv\Scripts on the user PATH so the command works from any directory.
-# Only new terminals see it, so the report below still warns until then.
-$venvScripts = Join-Path $PSScriptRoot ".venv\Scripts"
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-$entries = @()
-if ($userPath) {
-    $entries = @($userPath -split ';' | Where-Object { $_ })
-}
+# The entry itself is computed near the top of this script.
 if ($entries -notcontains $venvScripts) {
     try {
         [Environment]::SetEnvironmentVariable("Path", (($entries + $venvScripts) -join ';'), "User")

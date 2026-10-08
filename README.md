@@ -36,6 +36,8 @@ Each script creates `.venv`, installs the two Python dependencies (`textual` and
 
 On Linux and WSL the command is linked into `~/.local/bin`; on Windows `.venv\Scripts` is appended to your user `PATH`. If the report still says it is not on `PATH`, add the line it prints to your shell profile and open a new terminal.
 
+One checkout, one platform at a time. `.venv` holds a single interpreter, so running the other platform's script over it rebuilds `.venv` for that platform and this platform's `watch-smthn` disappears with it: on Windows that surfaces as the command not being recognized, on Linux as a dangling `~/.local/bin` link. Each script prints a `note:` line when it catches that, and rebuilding again is the repair, which is why alternating the two scripts on one checkout costs a reinstall each way.
+
 To do it by hand instead:
 
 ```bash
@@ -219,7 +221,7 @@ An override is used exactly as written, without an existence check, so a wrong p
 editor: code
 ```
 
-`ctrl+e` splits this value the way a shell would, so `editor: "code --wait"` and `editor: "kitty -e vim"` both work. It is checked before `VISUAL` and `EDITOR`, which are only consulted when `editor` is unset.
+`ctrl+e` splits this value the way a shell would, so `editor: "code --wait"` and `editor: "kitty -e vim"` both work. It is checked before `VISUAL` and `EDITOR`, which are only consulted when `editor` is unset. The first word may be an absolute path (`editor: /usr/bin/nano`), and everything after it is passed to that command as arguments.
 
 On Windows, with `editor` unset, the `.yaml` file association is used first. When there is no usable association, the editor is looked for in the known install locations in the order `code`, `notepad++`, `notepad`, and a machine with none of them reports all three by name instead of silently opening nothing. Under WSL the same Windows executables are found through `/mnt/c/...`.
 
